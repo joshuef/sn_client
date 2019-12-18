@@ -31,10 +31,6 @@
     unused_results
 )]
 
-// Public exports. See https://github.com/maidsafe/safe_client_libs/wiki/Export-strategy.
-
-// Export FFI interface.
-
 pub use ffi::arrays::*;
 pub use ffi::ipc::req::*;
 pub use ffi::ipc::resp::*;
@@ -82,6 +78,7 @@ pub mod nfs;
 /// Implements the Self Encryption storage trait.
 pub mod self_encryption_storage;
 /// Utility functions.
+#[macro_use]
 pub mod utils;
 
 #[cfg(not(feature = "mock-network"))]

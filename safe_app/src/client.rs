@@ -12,18 +12,21 @@ use crate::{AppContext, AppMsgTx};
 use log::trace;
 use lru_cache::LruCache;
 use rand::thread_rng;
-use safe_core::client::{Inner, SafeKey, IMMUT_DATA_CACHE_SIZE};
+use safe_core::client::{Inner, IMMUT_DATA_CACHE_SIZE};
 use safe_core::config_handler::Config;
 use safe_core::core_structs::AppKeys;
+use safe_nd::{Message, MessageId, Request, SafeKey};
+
 use safe_core::crypto::{shared_box, shared_secretbox};
 use safe_core::ipc::BootstrapConfig;
 use safe_core::{Client, ConnectionManager, NetworkTx};
-use safe_nd::{ClientFullId, PublicKey};
+use safe_nd::{AuthToken, ClientFullId, PublicKey};
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 use std::time::Duration;
 use tokio::runtime::current_thread::{block_on_all, Handle};
+use unwrap::unwrap;
 
 /// Client object used by `safe_app`.
 pub struct AppClient {
@@ -32,6 +35,12 @@ pub struct AppClient {
 }
 
 impl AppClient {
+    /// Authentication token
+    pub fn token(&self) -> Option<AuthToken> {
+        let app_inner = self.app_inner.borrow();
+        app_inner.token.clone()
+    }
+
     /// This is a getter-only Gateway function to the Maidsafe network. It will create an
     /// unregistered random client which can do a very limited set of operations, such as a
     /// Network-Get.
@@ -69,7 +78,7 @@ impl AppClient {
                 core_tx,
                 net_tx,
             ))),
-            app_inner: Rc::new(RefCell::new(AppInner::new(app_keys, pk, config))),
+            app_inner: Rc::new(RefCell::new(AppInner::new(app_keys, None, pk, config))),
         })
     }
 
@@ -77,15 +86,23 @@ impl AppClient {
     /// apps to authorise using an existing pair of keys.
     pub(crate) fn from_keys(
         keys: AppKeys,
+        token: AuthToken,
         owner: PublicKey,
         el_handle: Handle,
         core_tx: AppMsgTx,
         net_tx: NetworkTx,
         config: BootstrapConfig,
     ) -> Result<Self, AppError> {
-        Self::from_keys_impl(keys, owner, el_handle, core_tx, net_tx, config, |routing| {
-            routing
-        })
+        Self::from_keys_impl(
+            keys,
+            token,
+            owner,
+            el_handle,
+            core_tx,
+            net_tx,
+            config,
+            |routing| routing,
+        )
     }
 
     /// Allows customising the mock Routing client before logging in using client keys.
@@ -95,6 +112,7 @@ impl AppClient {
     ))]
     pub(crate) fn from_keys_with_hook<F>(
         keys: AppKeys,
+        token: AuthToken,
         owner: PublicKey,
         el_handle: Handle,
         core_tx: AppMsgTx,
@@ -107,6 +125,7 @@ impl AppClient {
     {
         Self::from_keys_impl(
             keys,
+            token,
             owner,
             el_handle,
             core_tx,
@@ -118,6 +137,7 @@ impl AppClient {
 
     fn from_keys_impl<F>(
         keys: AppKeys,
+        token: AuthToken,
         owner: PublicKey,
         el_handle: Handle,
         core_tx: AppMsgTx,
@@ -151,7 +171,12 @@ impl AppClient {
                 core_tx,
                 net_tx,
             ))),
-            app_inner: Rc::new(RefCell::new(AppInner::new(keys, owner, Some(config)))),
+            app_inner: Rc::new(RefCell::new(AppInner::new(
+                keys,
+                Some(token),
+                owner,
+                Some(config),
+            ))),
         })
     }
 }
@@ -191,6 +216,28 @@ impl Client for AppClient {
         let app_inner = self.app_inner.borrow();
         app_inner.keys.clone().enc_key
     }
+
+    fn compose_message(&self, request: Request, sign: bool) -> Message {
+        let message_id = MessageId::new();
+
+        let signature = if sign {
+            Some(
+                self.full_id()
+                    .sign(&unwrap!(bincode::serialize(&(&request, message_id)))),
+            )
+        } else {
+            None
+        };
+
+        let token = self.token();
+
+        Message::Request {
+            request,
+            token,
+            message_id,
+            signature,
+        }
+    }
 }
 
 impl Clone for AppClient {
@@ -212,12 +259,19 @@ struct AppInner {
     keys: AppKeys,
     owner_key: PublicKey,
     config: Option<BootstrapConfig>,
+    token: Option<AuthToken>,
 }
 
 impl AppInner {
-    pub fn new(keys: AppKeys, owner_key: PublicKey, config: Option<BootstrapConfig>) -> Self {
+    pub fn new(
+        keys: AppKeys,
+        token: Option<AuthToken>,
+        owner_key: PublicKey,
+        config: Option<BootstrapConfig>,
+    ) -> Self {
         Self {
             keys,
+            token,
             owner_key,
             config,
         }

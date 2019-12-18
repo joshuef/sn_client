@@ -32,9 +32,10 @@ use safe_core::btree_set;
 use safe_core::config_handler::Config;
 use safe_core::ffi::error_codes::ERR_NO_SUCH_CONTAINER;
 use safe_core::ffi::ipc::req::AppExchangeInfo as FfiAppExchangeInfo;
-use safe_core::ipc::{self, AuthReq, ContainersReq, IpcError, IpcMsg, IpcReq, IpcResp, Permission};
+use safe_core::ipc::{self, AuthReq, ContainersReq, IpcMsg, IpcReq, IpcResp, Permission};
 use safe_core::{app_container_name, mdata_info, AuthActions, Client};
 use safe_nd::AppPermissions;
+use safe_nd::IpcError;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::mpsc;
@@ -486,6 +487,7 @@ fn app_authentication() {
     };
 
     assert_eq!(received_req_id, req_id);
+
     assert_eq!(received_auth_req, auth_req);
 
     let encoded_auth_resp: String = unsafe {
@@ -535,6 +537,10 @@ fn app_authentication() {
 
     let app_keys = auth_granted.app_keys;
     let app_pk = app_keys.public_key();
+    let token = auth_granted.token;
+
+    assert!(!token.signature.is_none());
+    // TODO: check caveats against desired perms etc.
 
     test_utils::compare_access_container_entries(
         &authenticator,

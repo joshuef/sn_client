@@ -16,17 +16,16 @@ pub mod mdata_info;
 /// Various APIs wrapped to provide resiliance for common network operations.
 pub mod recoverable_apis;
 
-mod id;
 #[cfg(feature = "mock-network")]
 mod mock;
 
 pub use self::account::ClientKeys;
-pub use self::id::SafeKey;
 pub use self::mdata_info::MDataInfo;
 #[cfg(feature = "mock-network")]
 pub use self::mock::vault::mock_vault_path;
 #[cfg(feature = "mock-network")]
 pub use self::mock::ConnectionManager as MockConnectionManager;
+use safe_nd::SafeKey;
 
 #[cfg(feature = "mock-network")]
 use self::mock::ConnectionManager;
@@ -193,6 +192,7 @@ pub trait Client: Clone + 'static {
 
         Message::Request {
             request,
+            token: None, // TODO: ensure overriden where relevant
             message_id,
             signature,
         }
@@ -1141,7 +1141,7 @@ pub fn test_create_balance(owner: &ClientFullId, amount: Coins) -> Result<(), Co
             x => return Err(CoreError::from(format!("Unexpected ID type {:?}", x))),
         };
 
-        let response = req(
+        let response = get_priority_response(
             &mut cm,
             Request::CreateBalance {
                 new_balance_owner,
@@ -1162,12 +1162,14 @@ pub fn test_create_balance(owner: &ClientFullId, amount: Coins) -> Result<(), Co
 pub fn wallet_get_balance(wallet_sk: &ClientFullId) -> Result<Coins, CoreError> {
     trace!("Get balance for {:?}", wallet_sk);
 
-    temp_client(wallet_sk, move |mut cm, full_id| {
-        match req(&mut cm, Request::GetBalance, &full_id)? {
+    temp_client(
+        wallet_sk,
+        move |mut cm, full_id| match get_priority_response(&mut cm, Request::GetBalance, &full_id)?
+        {
             Response::GetBalance(res) => res.map_err(CoreError::from),
             _ => Err(CoreError::from("Unexpected response")),
-        }
-    })
+        },
+    )
 }
 
 /// Creates a new coin balance on the network.
@@ -1186,7 +1188,7 @@ pub fn wallet_create_balance(
     let transaction_id = transaction_id.unwrap_or_else(rand::random);
 
     temp_client(client_id, move |mut cm, full_id| {
-        let response = req(
+        let response = get_priority_response(
             &mut cm,
             Request::CreateBalance {
                 new_balance_owner,
@@ -1214,7 +1216,7 @@ pub fn wallet_transfer_coins(
     let transaction_id = transaction_id.unwrap_or_else(rand::random);
 
     temp_client(client_id, move |mut cm, full_id| {
-        let response = req(
+        let response = get_priority_response(
             &mut cm,
             Request::TransferCoins {
                 destination,
@@ -1298,6 +1300,7 @@ fn sign_request(request: Request, client_id: &ClientFullId) -> Message {
         request,
         message_id,
         signature,
+        token: None,
     }
 }
 
@@ -1342,9 +1345,9 @@ impl<C: Client, T> Inner<C, T> {
     }
 }
 
-/// Send a request and wait for a response.
+/// Send a request and wait for a response. Specific to core and auth clients. Not usable by apps.
 /// This function is blocking.
-pub fn req(
+pub fn get_priority_response(
     cm: &mut ConnectionManager,
     request: Request,
     full_id_new: &SafeKey,
@@ -1358,6 +1361,7 @@ pub fn req(
             request,
             message_id,
             signature: Some(signature),
+            token: None, // TODO, this should probably need a token
         },
     ))
 }

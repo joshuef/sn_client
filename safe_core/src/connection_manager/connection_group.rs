@@ -6,7 +6,10 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::{client::SafeKey, err, utils, CoreError, CoreFuture};
+use crate::err;
+use crate::{utils, CoreError, CoreFuture};
+use safe_nd::SafeKey;
+
 use bincode::{deserialize, serialize};
 use bytes::Bytes;
 use crossbeam_channel::{self, Receiver};

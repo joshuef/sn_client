@@ -27,7 +27,9 @@ use safe_core::ipc::req::{
     ShareMDataReq as NativeShareMDataReq,
 };
 use safe_core::ipc::resp::IpcResp;
-use safe_core::ipc::{decode_msg, IpcError, IpcMsg};
+use safe_core::ipc::{decode_msg, IpcMsg};
+use safe_nd::IpcError;
+
 use safe_core::{client, CoreError, FutureExt};
 use safe_core::{fry, ok};
 use safe_nd::MDataAddress;

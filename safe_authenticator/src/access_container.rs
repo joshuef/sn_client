@@ -210,7 +210,7 @@ pub fn put_entry(
     client: &AuthClient,
     app_id: &str,
     app_keys: &AppKeys,
-    permissions: &AccessContainerEntry,
+    app_entry: &AccessContainerEntry,
     version: u64,
 ) -> Box<AuthFuture<()>> {
     trace!("Putting access container entry for app {}...", app_id);
@@ -220,7 +220,7 @@ pub fn put_entry(
     let access_container = client.access_container();
     let acc_cont_info = access_container.clone();
     let key = fry!(enc_key(&access_container, app_id, &app_keys.enc_key));
-    let ciphertext = fry!(encode_app_entry(permissions, &app_keys.enc_key));
+    let ciphertext = fry!(encode_app_entry(app_entry, &app_keys.enc_key));
 
     let actions = if version == 0 {
         MDataSeqEntryActions::new().ins(key, ciphertext, 0)

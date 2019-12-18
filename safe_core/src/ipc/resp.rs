@@ -8,15 +8,20 @@
 
 #![allow(unsafe_code)]
 
+use safe_nd::AuthToken;
+
 use crate::core_structs::{
     access_container_entry_clone_from_repr_c, access_container_entry_into_repr_c, AccessContInfo,
     AccessContainerEntry, AppKeys,
 };
+
 use crate::ffi::ipc::resp as ffi;
 
-use crate::ipc::{BootstrapConfig, IpcError};
+use crate::ipc::BootstrapConfig;
+
 use bincode::{deserialize, serialize};
 use ffi_utils::{vec_into_raw_parts, ReprC};
+use safe_nd::IpcError;
 
 use serde::{Deserialize, Serialize};
 use std::slice;
@@ -41,7 +46,8 @@ pub enum IpcResp {
 pub struct AuthGranted {
     /// The access keys.
     pub app_keys: AppKeys,
-
+    /// The auth token.
+    pub token: AuthToken,
     /// The crust config.
     /// Useful to reuse bootstrap nodes and speed up access.
     pub bootstrap_config: BootstrapConfig,
@@ -55,7 +61,8 @@ pub struct AuthGranted {
 impl AuthGranted {
     /// Construct FFI wrapper for the native Rust object, consuming self.
     pub fn into_repr_c(self) -> Result<ffi::AuthGranted, IpcError> {
-        let Self {
+        let AuthGranted {
+            token,
             app_keys,
             bootstrap_config,
             access_container_info,
@@ -65,6 +72,7 @@ impl AuthGranted {
         let (ptr, len) = vec_into_raw_parts(bootstrap_config);
 
         Ok(ffi::AuthGranted {
+            token: token.into_repr_c()?,
             app_keys: app_keys.into_repr_c()?,
             access_container_info: access_container_info.into_repr_c(),
             access_container_entry: access_container_entry_into_repr_c(access_container_entry)?,
@@ -81,6 +89,7 @@ impl ReprC for AuthGranted {
     unsafe fn clone_from_repr_c(repr_c: Self::C) -> Result<Self, Self::Error> {
         let ffi::AuthGranted {
             ref app_keys,
+            ref token,
             bootstrap_config,
             bootstrap_config_len,
             access_container_info,
@@ -92,6 +101,7 @@ impl ReprC for AuthGranted {
 
         Ok(Self {
             app_keys: AppKeys::clone_from_repr_c(app_keys)?,
+            token: AuthToken::clone_from_repr_c(token)?,
             bootstrap_config,
             access_container_info: AccessContInfo::clone_from_repr_c(access_container_info)?,
             access_container_entry: access_container_entry_clone_from_repr_c(
@@ -112,6 +122,7 @@ mod tests {
     // Test converting an `AuthGranted` object to its FFI representation and then back again.
     #[test]
     fn auth_granted() {
+        // TODO: update with tokens
         let client_id = gen_client_id();
         let ak = AppKeys::new(client_id.public_id().clone());
         let ac = AccessContInfo {
@@ -119,7 +130,11 @@ mod tests {
             tag: 681,
             nonce: utils::generate_nonce(),
         };
+
+        let the_token = AuthToken::new().unwrap();
+
         let ag = AuthGranted {
+            token: the_token,
             app_keys: ak,
             bootstrap_config: BootstrapConfig::default(),
             access_container_info: ac,

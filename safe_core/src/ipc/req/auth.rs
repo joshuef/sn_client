@@ -8,9 +8,9 @@
 
 use super::{containers_from_repr_c, containers_into_vec, AppExchangeInfo, ContainerPermissions};
 use crate::ffi::ipc::req as ffi;
-use crate::ipc::errors::IpcError;
 use ffi_utils::{vec_into_raw_parts, ReprC, StringError};
 use safe_nd::AppPermissions;
+use safe_nd::IpcError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

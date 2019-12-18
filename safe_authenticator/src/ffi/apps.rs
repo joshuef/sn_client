@@ -223,7 +223,9 @@ mod tests {
     };
     use crate::{config, run};
     use ffi_utils::test_utils::call_0;
-    use safe_core::ipc::{AuthReq, IpcError};
+    use safe_core::ipc::AuthReq;
+    use safe_nd::IpcError;
+
     use std::collections::HashMap;
     use unwrap::unwrap;
 
@@ -290,6 +292,42 @@ mod tests {
                     _ => panic!("App state changed after failed revocation"),
                 })
         }));
+    }
+
+    // Authorised app, token check:
+    // 1. Authorise a new app A
+    // 2. Check a token was received
+    // 3. Verify token is signed.
+    // 4. TODO: Verify token has needed caveats.
+    // 5. TODO: Verify app exists in auth container...
+    // 6. More?
+    #[test]
+    fn authorised_token_received_signed() {
+        // #[macro_use]
+        // extern crate assert_type_eq;
+        // use safe_core::auth_token::AuthToken;
+        let auth = create_account_and_login();
+        let app_info = rand_app();
+        // let app_id = app_info.id.clone();
+
+        let auth_response = unwrap!(register_app(
+            &auth,
+            &AuthReq {
+                app: app_info,
+                app_container: false,
+                app_permissions: Default::default(),
+                containers: HashMap::new(),
+            },
+        ));
+
+        println!("What did we get back {:?}", &auth_response);
+
+        // we have a token, and it is signed
+        assert!(!&auth_response.token.signature.is_none());
+
+        // TODO: Actually use caveats...
+        // check the caveats
+        // assert_eq!( &auth_response.token.caveats.len(), 1 );
     }
 
     // Test complete app removal

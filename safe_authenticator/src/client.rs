@@ -18,12 +18,13 @@ use lru_cache::LruCache;
 use rand::rngs::StdRng;
 use rand::{thread_rng, CryptoRng, Rng, SeedableRng};
 use safe_core::client::account::Account;
-use safe_core::client::{req, AuthActions, Inner, SafeKey, IMMUT_DATA_CACHE_SIZE};
+use safe_core::client::{get_priority_response, AuthActions, Inner, IMMUT_DATA_CACHE_SIZE};
 use safe_core::config_handler::Config;
 use safe_core::crypto::{shared_box, shared_secretbox};
 use safe_core::fry;
 use safe_core::ipc::BootstrapConfig;
 use safe_core::{utils, Client, ClientKeys, ConnectionManager, CoreError, MDataInfo, NetworkTx};
+use safe_nd::SafeKey;
 use safe_nd::{
     ClientFullId, LoginPacket, Message, MessageId, PublicId, PublicKey, Request, Response, XorName,
 };
@@ -173,7 +174,7 @@ impl AuthClient {
 
             block_on_all(connection_manager.bootstrap(balance_full_id.clone()))?;
 
-            let response = req(
+            let response = get_priority_response(
                 &mut connection_manager,
                 Request::CreateLoginPacket(new_login_packet),
                 &balance_full_id,
@@ -295,7 +296,7 @@ impl AuthClient {
 
             block_on_all(connection_manager.bootstrap(client_full_id.clone()))?;
 
-            let response = req(
+            let response = get_priority_response(
                 &mut connection_manager,
                 Request::GetLoginPacket(acc_locator),
                 &client_full_id,
@@ -447,6 +448,7 @@ impl AuthClient {
                             request,
                             message_id,
                             signature: Some(signature),
+                            token: None,
                         },
                     )
                 })

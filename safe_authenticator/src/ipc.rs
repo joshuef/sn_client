@@ -23,9 +23,10 @@ use safe_core::core_structs::{UserMetadata, METADATA_KEY};
 use safe_core::ffi::ipc::resp::MetadataResponse as FfiUserMetadata;
 use safe_core::ipc::req::{IpcReq, ShareMDataReq};
 use safe_core::ipc::resp::IpcResp;
-use safe_core::ipc::{self, IpcError, IpcMsg};
+use safe_core::ipc::{self, IpcMsg};
 use safe_core::{err, ok};
 use safe_core::{Client, CoreError, FutureExt};
+use safe_nd::IpcError;
 use safe_nd::{Error as SndError, XorName};
 use std::ffi::CString;
 

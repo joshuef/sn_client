@@ -16,10 +16,12 @@ use crate::errors::AppError;
 use bincode::Error as SerialisationError;
 use ffi_utils::{ErrorCode, StringError};
 use futures::sync::mpsc::SendError;
-use safe_core::ipc::IpcError;
+
 use safe_core::nfs::NfsError;
 use safe_core::{CoreError, SelfEncryptionStorageError};
 use safe_nd::Error as SndError;
+use safe_nd::IpcError;
+
 use self_encryption::SelfEncryptionError;
 use std::ffi::NulError;
 use std::fmt::{self, Display, Formatter};

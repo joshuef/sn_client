@@ -63,6 +63,7 @@ mod std_dirs;
 mod tests;
 
 use crate::ffi::errors::Error;
+
 use futures::stream::Stream;
 use futures::sync::mpsc;
 use futures::{Future, IntoFuture};

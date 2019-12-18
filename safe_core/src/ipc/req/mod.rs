@@ -20,8 +20,8 @@ use crate::ffi::ipc::req::{
     AppExchangeInfo as FfiAppExchangeInfo, ContainerPermissions as FfiContainerPermissions,
     PermissionSet as FfiPermissionSet,
 };
-use crate::ipc::errors::IpcError;
 use ffi_utils::{ReprC, StringError};
+use safe_nd::IpcError;
 use safe_nd::{MDataAction, MDataPermissionSet};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};

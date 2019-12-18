@@ -165,9 +165,10 @@ mod mock_routing {
     use rand::rngs::StdRng;
     use rand::FromEntropy;
     use safe_core::client::AuthActions;
-    use safe_core::ipc::{IpcError, Permission};
+    use safe_core::ipc::Permission;
     use safe_core::utils::test_utils::Synchronizer;
     use safe_core::ConnectionManager;
+    use safe_nd::IpcError;
     use safe_nd::{Request, Response};
     use std::{
         collections::HashMap,

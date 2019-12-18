@@ -6,7 +6,6 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::client::id::SafeKey;
 use crate::client::MDataInfo;
 use crate::crypto::{shared_box, shared_secretbox};
 use crate::errors::CoreError;
@@ -18,6 +17,7 @@ use miscreant::aead::Aead;
 use miscreant::aead::Aes128SivAead;
 use pbkdf2;
 use rand::{thread_rng, CryptoRng, Rng};
+use safe_nd::SafeKey;
 use safe_nd::{ClientFullId, MDataKind, PublicKey, XorName, XOR_NAME_LEN};
 use serde::{Deserialize, Serialize};
 use sha3::Sha3_256;

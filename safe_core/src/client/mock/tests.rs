@@ -11,7 +11,9 @@
 #![allow(unused_imports)] // Remove this after fixing all the tests
 
 use crate::client::mock::vault::Vault;
-use crate::client::{SafeKey, COST_OF_PUT};
+use crate::client::COST_OF_PUT;
+use safe_nd::SafeKey;
+
 use crate::config_handler::{Config, DevConfig};
 use crate::utils::test_utils::{gen_app_id, gen_client_id};
 use crate::{utils, NetworkEvent, QuicP2pConfig};
@@ -71,6 +73,7 @@ fn process_request(
         request,
         message_id,
         signature,
+        token: None, // TODO: Does this need a token?
     };
     unwrap!(connection_manager
         .send(&sender.public_id(), &message)

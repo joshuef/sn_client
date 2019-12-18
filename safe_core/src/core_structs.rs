@@ -10,19 +10,24 @@
 #![allow(unsafe_code)]
 
 ///! Core structs for network operations
-use crate::client::{MDataInfo, SafeKey};
+use crate::client::MDataInfo;
 use crate::crypto::{shared_box, shared_secretbox};
 use crate::ffi::ipc::resp as ffi;
+use safe_nd::SafeKey;
+
+// TODO, move these here...
 use crate::ipc::req::{
     container_perms_from_repr_c, container_perms_into_repr_c, permission_set_clone_from_repr_c,
-    permission_set_into_repr_c, ContainerPermissions,
+    permission_set_into_repr_c,
 };
-use crate::ipc::IpcError;
+pub use crate::ipc::req::{container_perms_into_permission_set, ContainerPermissions};
+
 use crate::utils::{symmetric_encrypt, SymEncKey, SymEncNonce, SYM_ENC_NONCE_LEN};
 use crate::CoreError;
 use bincode::{deserialize, serialize};
 use ffi_utils::{vec_clone_from_raw_parts, vec_into_raw_parts, ReprC, StringError};
 use rand::thread_rng;
+use safe_nd::IpcError;
 use safe_nd::{
     AppFullId, ClientPublicId, MDataAddress, MDataPermissionSet, MDataSeqValue, PublicKey, XorName,
 };

@@ -10,11 +10,11 @@ use crate::crypto::shared_secretbox;
 use crate::errors::CoreError;
 use crate::ffi::arrays::{SymNonce, SymSecretKey};
 use crate::ffi::{md_kind_clone_from_repr_c, md_kind_into_repr_c, MDataInfo as FfiMDataInfo};
-use crate::ipc::IpcError;
 use crate::utils::{
     self, symmetric_decrypt, symmetric_encrypt, SymEncKey, SymEncNonce, SYM_ENC_NONCE_LEN,
 };
 use ffi_utils::ReprC;
+use safe_nd::IpcError;
 use safe_nd::{
     MDataAddress, MDataKind, MDataSeqEntries, MDataSeqEntryAction, MDataSeqValue, XorName,
 };

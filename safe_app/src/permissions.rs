@@ -13,7 +13,7 @@ use crate::ffi::mutable_data::permissions::UserPermissionSet as FfiUserPermissio
 use crate::ffi::object_cache::SignPubKeyHandle;
 use ffi_utils::ReprC;
 use safe_core::ipc::req::{permission_set_clone_from_repr_c, permission_set_into_repr_c};
-use safe_core::ipc::IpcError;
+use safe_nd::IpcError;
 use safe_nd::MDataPermissionSet;
 use serde_derive::{Deserialize, Serialize};
 

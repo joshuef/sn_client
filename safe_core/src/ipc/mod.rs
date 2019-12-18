@@ -11,13 +11,12 @@ pub mod req;
 /// Response module.
 pub mod resp;
 
-mod errors;
-
-pub use self::errors::IpcError;
 pub use self::req::{
     AppExchangeInfo, AuthReq, ContainersReq, IpcReq, Permission, ShareMData, ShareMDataReq,
 };
+
 pub use self::resp::{AuthGranted, IpcResp};
+use safe_nd::IpcError;
 
 use bincode::{deserialize, serialize};
 use data_encoding::BASE32_NOPAD;

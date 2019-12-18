@@ -89,10 +89,12 @@ use bincode::deserialize;
 use futures::stream::Stream;
 use futures::sync::mpsc as futures_mpsc;
 use futures::{future, Future, IntoFuture};
+
 use log::info;
 use safe_core::core_structs::{access_container_enc_key, AccessContInfo, AccessContainerEntry};
 use safe_core::crypto::shared_secretbox;
 use safe_core::ipc::{AuthGranted, BootstrapConfig};
+
 #[cfg(feature = "mock-network")]
 use safe_core::ConnectionManager;
 use safe_core::{event_loop, fry, CoreMsg, CoreMsgTx, NetworkEvent, NetworkTx};
@@ -173,6 +175,7 @@ impl App {
     {
         let AuthGranted {
             app_keys,
+            token,
             access_container_info,
             bootstrap_config,
             ..
@@ -181,8 +184,15 @@ impl App {
         let owner_key = *app_keys.app_full_id.public_id().owner().public_key();
 
         Self::new(disconnect_notifier, move |el_h, core_tx, net_tx| {
-            let client =
-                AppClient::from_keys(app_keys, owner_key, el_h, core_tx, net_tx, bootstrap_config)?;
+            let client = AppClient::from_keys(
+                app_keys,
+                token,
+                owner_key,
+                el_h,
+                core_tx,
+                net_tx,
+                bootstrap_config,
+            )?;
             let context = AppContext::registered(app_id, enc_key, access_container_info);
             Ok((client, context))
         })
@@ -202,6 +212,7 @@ impl App {
     {
         let AuthGranted {
             app_keys,
+            token,
             access_container_info,
             bootstrap_config,
             ..
@@ -212,6 +223,7 @@ impl App {
         Self::new(disconnect_notifier, move |el_h, core_tx, net_tx| {
             let client = AppClient::from_keys_with_hook(
                 app_keys,
+                token,
                 owner_key,
                 el_h,
                 core_tx,
@@ -344,6 +356,7 @@ impl AppContext {
         Ok(&self.as_registered()?.sym_enc_key)
     }
 
+    // TODO: make this work from tokens
     /// Refresh access info by fetching it from the network.
     pub fn refresh_access_info(&self, client: &AppClient) -> Box<AppFuture<()>> {
         let reg = Rc::clone(fry!(self.as_registered()));

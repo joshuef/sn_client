@@ -21,9 +21,10 @@ use futures::future::Future;
 use safe_core::client::Client;
 use safe_core::core_structs::{access_container_enc_key, AccessContainerEntry, AppAccess};
 use safe_core::ipc::req::{containers_from_repr_c, containers_into_vec, ContainerPermissions};
-use safe_core::ipc::{AppExchangeInfo, IpcError};
+use safe_core::ipc::AppExchangeInfo;
 use safe_core::utils::symmetric_decrypt;
 use safe_core::FutureExt;
+use safe_nd::IpcError;
 use safe_nd::{AppPermissions, MDataAddress, XorName};
 use std::collections::HashMap;
 

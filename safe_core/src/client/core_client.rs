@@ -9,7 +9,7 @@
 use crate::client::account::{Account as ClientAccount, ClientKeys};
 #[cfg(feature = "mock-network")]
 use crate::client::mock::ConnectionManager;
-use crate::client::{req, AuthActions, Client, Inner, SafeKey, IMMUT_DATA_CACHE_SIZE};
+use crate::client::{get_priority_response, AuthActions, Client, Inner, IMMUT_DATA_CACHE_SIZE};
 use crate::config_handler::Config;
 #[cfg(not(feature = "mock-network"))]
 use crate::connection_manager::ConnectionManager;
@@ -23,7 +23,7 @@ use log::trace;
 use lru_cache::LruCache;
 use rand::rngs::StdRng;
 use rand::{thread_rng, SeedableRng};
-use safe_nd::{ClientFullId, Coins, LoginPacket, PublicKey, Request, Response};
+use safe_nd::{ClientFullId, Coins, LoginPacket, PublicKey, Request, Response, SafeKey};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -111,7 +111,7 @@ impl CoreClient {
             block_on_all(connection_manager.bootstrap(balance_client_id.clone()))?;
 
             // Create the balance for the client
-            let response = req(
+            let response = get_priority_response(
                 &mut connection_manager,
                 Request::CreateBalance {
                     new_balance_owner,
@@ -125,7 +125,7 @@ impl CoreClient {
                 _ => return Err(CoreError::from("Unexpected response")),
             };
 
-            let response = req(
+            let response = get_priority_response(
                 &mut connection_manager,
                 Request::CreateLoginPacket(new_login_packet),
                 &balance_client_id,

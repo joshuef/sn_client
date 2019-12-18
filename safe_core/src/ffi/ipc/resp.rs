@@ -8,10 +8,13 @@
 
 // All the FFI array types must be imported at the file
 // level for safe_bindgen to parse correctly
+// use crate::auth_token::Caveat;
 use crate::ffi::arrays::*;
 use crate::ffi::ipc::req::PermissionSet;
 use crate::ffi::MDataInfo;
 use ffi_utils::vec_from_raw_parts;
+use safe_nd::AuthToken;
+
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::ptr;
@@ -93,13 +96,14 @@ impl Drop for AccessContainerEntry {
 /// Represents the authentication response.
 #[repr(C)]
 pub struct AuthGranted {
+    /// The auth token.
+    pub token: AuthToken,
     /// The access keys.
     pub app_keys: AppKeys,
     /// Access container info.
     pub access_container_info: AccessContInfo,
     /// Access container entry.
     pub access_container_entry: AccessContainerEntry,
-
     /// QuicP2P bootstrap config.
     pub bootstrap_config: *const u8,
     /// `bootstrap_config`'s length.

@@ -385,13 +385,14 @@ impl Vault {
         requester: PublicId,
         message: &Message,
     ) -> SndResult<Message> {
-        let (request, message_id, signature) = if let Message::Request {
+        let (request, message_id, token, signature) = if let Message::Request {
             request,
             message_id,
+            token,
             signature,
         } = message
         {
-            (request, *message_id, signature)
+            (request, *message_id, token, signature)
         } else {
             return Err(SndError::from("Unexpected Message type"));
         };

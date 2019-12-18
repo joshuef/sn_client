@@ -8,9 +8,9 @@
 
 mod connection_group;
 
-use crate::{
-    client::SafeKey, network_event::NetworkEvent, network_event::NetworkTx, CoreError, CoreFuture,
-};
+use crate::{network_event::NetworkEvent, network_event::NetworkTx, CoreError, CoreFuture};
+use safe_nd::SafeKey;
+
 use crate::{fry, ok};
 use connection_group::ConnectionGroup;
 use futures::{future, Future};

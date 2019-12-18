@@ -159,7 +159,7 @@ fn revoke_single_app(client: &AuthClient, app_id: &str) -> Box<AuthFuture<()>> {
         .into_box()
 }
 
-// Delete the app auth key from the Maid Manager - this prevents the app from
+// Delete the app auth key from the Client Handler - this prevents the app from
 // performing any more mutations.
 fn delete_app_auth_key(client: &AuthClient, key: PublicKey) -> Box<AuthFuture<()>> {
     let client = client.clone();

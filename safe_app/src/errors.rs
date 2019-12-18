@@ -12,10 +12,10 @@
 use bincode::Error as SerialisationError;
 use ffi_utils::StringError;
 use futures::sync::mpsc::SendError;
-use safe_core::ipc::IpcError;
 use safe_core::nfs::NfsError;
 use safe_core::{CoreError, SelfEncryptionStorageError};
 use safe_nd::Error as SndError;
+use safe_nd::IpcError;
 use self_encryption::SelfEncryptionError;
 use std::error::Error;
 use std::ffi::NulError;

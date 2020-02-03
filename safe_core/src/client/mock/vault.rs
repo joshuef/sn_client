@@ -385,7 +385,7 @@ impl Vault {
         requester: PublicId,
         message: &Message,
     ) -> SndResult<Message> {
-        let (request, message_id, token, signature) = if let Message::Request {
+        let (request, message_id, _token, signature) = if let Message::Request {
             request,
             message_id,
             token,

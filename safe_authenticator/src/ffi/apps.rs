@@ -230,6 +230,7 @@ mod tests {
     use unwrap::unwrap;
 
     use super::*;
+    use safe_core::Client;
 
     // Negative test - non-existing app:
     // 1. Try to call `auth_rm_revoked_app` with a random, non-existing app_id
@@ -303,12 +304,8 @@ mod tests {
     // 6. More?
     #[test]
     fn authorised_token_received_signed() {
-        // #[macro_use]
-        // extern crate assert_type_eq;
-        // use safe_core::auth_token::AuthToken;
         let auth = create_account_and_login();
         let app_info = rand_app();
-        // let app_id = app_info.id.clone();
 
         let auth_response = unwrap!(register_app(
             &auth,
@@ -321,13 +318,21 @@ mod tests {
         ));
 
         println!("What did we get back {:?}", &auth_response);
-
         // we have a token, and it is signed
-        assert!(!&auth_response.token.signature.is_none());
-
-        // TODO: Actually use caveats...
-        // check the caveats
-        // assert_eq!( &auth_response.token.caveats.len(), 1 );
+        // verify the token
+        unwrap!(run(&auth, move |client| {
+            // Verify if the signature is signed by the client and is verifiable by client's public ID
+            assert!(auth_response
+                .token
+                .is_valid_for_public_id(&client.public_id())
+                .is_ok());
+            // Verify the contents in the Caveat
+            for (caveat_name, caveat_contents) in auth_response.token.caveats {
+                assert_eq!(caveat_name, "expire".to_string());
+                assert_eq!(caveat_contents, "now".to_string());
+            }
+            Ok(())
+        }));
     }
 
     // Test complete app removal

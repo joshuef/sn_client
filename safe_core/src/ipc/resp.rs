@@ -72,7 +72,9 @@ impl AuthGranted {
         let (ptr, len) = vec_into_raw_parts(bootstrap_config);
 
         Ok(ffi::AuthGranted {
-            token: token.into_repr_c()?,
+            token: token.into_repr_c().map_err(|_| {
+                IpcError::Unexpected("Error converting AuthToken to reprC".to_string())
+            })?,
             app_keys: app_keys.into_repr_c()?,
             access_container_info: access_container_info.into_repr_c(),
             access_container_entry: access_container_entry_into_repr_c(access_container_entry)?,

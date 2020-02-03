@@ -25,7 +25,7 @@ use safe_core::{
     app_container_name, client::AuthActions, recoverable_apis, Client, FutureExt, MDataInfo,
 };
 use safe_core::{btree_set, err, fry, ok};
-use safe_nd::{AppPermissions, AuthToken, FullId};
+use safe_nd::{AppPermissions, AuthToken};
 use std::collections::HashMap;
 use tiny_keccak::sha3_256;
 use unwrap::unwrap;
@@ -296,7 +296,7 @@ fn authenticate_new_app(
     let app_keys = app.keys.clone();
     let app_keys_auth = app.keys.clone();
     let app_id = app.info.id.clone();
-    let app_full_id_for_token = FullId::App(app.keys.app_full_id.clone());
+    let client_safe_key = client.full_id();
 
     client
         .list_auth_keys_and_version()
@@ -341,7 +341,7 @@ fn authenticate_new_app(
             let caveat = ("expire".to_string(), "now".to_string());
 
             // Sign the token with app keys
-            token.add_caveat(caveat, &app_full_id_for_token).unwrap();
+            token.add_caveat(caveat, &client_safe_key)?;
 
             Ok(AuthGranted {
                 token,

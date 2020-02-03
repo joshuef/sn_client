@@ -357,6 +357,7 @@ mod tests {
     };
     use safe_core::utils;
     use safe_core::utils::test_utils::{gen_app_id, gen_client_id};
+    use safe_nd::AuthToken;
     use safe_nd::{MDataAction, MDataPermissionSet};
     use std::collections::HashMap;
     use std::ffi::CString;
@@ -632,7 +633,7 @@ mod tests {
         };
 
         let app_keys = gen_app_keys();
-        let token = auth_utils::generate_signed_token(app_keys.clone());
+        let token = unwrap!(AuthToken::new());
         let auth_granted = AuthGranted {
             app_keys,
             token,
@@ -979,6 +980,20 @@ mod tests {
             enc_secret_key,
         }
     }
+
+    /*
+    /// Generate a token with base caveat
+    fn generate_signed_token(app_keys: AppKeys) -> AuthToken {
+        let mut token = AuthToken::new().unwrap();
+
+
+        let caveat = ("expire".to_string(), "nowthen".to_string());
+
+        token.add_caveat(caveat, &full_id).unwrap();
+
+        token
+    }
+    */
 
     struct Context {
         unexpected_cb: bool,

@@ -110,6 +110,7 @@ impl AppClient {
         all(test, feature = "mock-network"),
         all(feature = "testing", feature = "mock-network")
     ))]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_keys_with_hook<F>(
         keys: AppKeys,
         token: AuthToken,
@@ -135,6 +136,7 @@ impl AppClient {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn from_keys_impl<F>(
         keys: AppKeys,
         token: AuthToken,

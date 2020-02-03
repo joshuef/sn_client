@@ -21,7 +21,7 @@ use futures::{future, Future, IntoFuture};
 use log::Record;
 use log::{error, trace};
 use safe_core::client::{test_create_balance, Client};
-use safe_core::core_structs::{AppKeys,AccessContainerEntry, UserMetadata};
+use safe_core::core_structs::{AccessContainerEntry, UserMetadata};
 use safe_core::crypto::shared_secretbox;
 use safe_core::ffi::ipc::req::{
     AuthReq as FfiAuthReq, ContainersReq as FfiContainersReq, ShareMDataRequest as FfiShareMDataReq,
@@ -37,7 +37,7 @@ use safe_core::utils::test_utils::{gen_client_id, setup_client_with_net_obs};
 #[cfg(feature = "mock-network")]
 use safe_core::ConnectionManager;
 use safe_core::{utils, MDataInfo, NetworkEvent};
-use safe_nd::{AppPermissions, AuthToken, FullId, Coins, PublicKey, XorName};
+use safe_nd::{AppPermissions, Coins, PublicKey, XorName};
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fmt::Debug;
@@ -90,6 +90,7 @@ pub fn init_log() {
         .try_init();
 }
 
+/*
 /// Generate a token with base caveat
 pub fn generate_signed_token(app_keys: AppKeys) -> AuthToken {
         let mut token = AuthToken::new().unwrap();
@@ -100,8 +101,8 @@ pub fn generate_signed_token(app_keys: AppKeys) -> AuthToken {
         token.add_caveat(caveat, &full_id).unwrap();
 
         token
-    }
-
+}
+*/
 
 /// Creates a new random account for authenticator. Returns the `Authenticator`
 /// instance and the locator and password strings.

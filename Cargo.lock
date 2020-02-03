@@ -1831,7 +1831,7 @@ checksum = "bfa8506c1de11c9c4e4c38863ccbe02a305c8188e85a05a784c9e11e1c3910c8"
 [[package]]
 name = "safe-nd"
 version = "0.7.2"
-source = "git+https://github.com/joshuef/safe-nd.git?rev=9ac90e0e2db9d7ccd2dded4f2f587a91fb2853a3#9ac90e0e2db9d7ccd2dded4f2f587a91fb2853a3"
+source = "git+https://github.com/joshuef/safe-nd.git?rev=871ae7e9e10850bcc75df1ba96542ab0e2c4b809#871ae7e9e10850bcc75df1ba96542ab0e2c4b809"
 dependencies = [
  "bincode",
  "data-encoding",
@@ -1842,7 +1842,6 @@ dependencies = [
  "multibase",
  "rand 0.6.5",
  "serde",
- "serde_json",
  "sha3",
  "threshold_crypto",
  "tiny-keccak",

@@ -25,7 +25,7 @@ use safe_core::{
     app_container_name, client::AuthActions, recoverable_apis, Client, FutureExt, MDataInfo,
 };
 use safe_core::{btree_set, err, fry, ok};
-use safe_nd::{AppPermissions, AuthToken};
+use safe_nd::{AppPermissions, AuthToken, GET_BALANCE, PERFORM_MUTATIONS, TRANSFER_COINS};
 use std::collections::HashMap;
 use tiny_keccak::sha3_256;
 use unwrap::unwrap;
@@ -165,7 +165,6 @@ pub fn authenticate(client: &AuthClient, auth_req: AuthReq) -> Box<AuthFuture<Au
             match app_state {
                 AppState::NotAuthenticated => {
                     let public_id = c3.public_id();
-
                     // Safe to unwrap as the auth client will have a client public id.
                     let keys = AppKeys::new(unwrap!(public_id.client_public_id()).clone());
                     let app = AppInfo {
@@ -298,6 +297,32 @@ fn authenticate_new_app(
     let app_id = app.info.id.clone();
     let client_safe_key = client.full_id();
 
+    let mut token = AuthToken::new().expect("Error creating new token.");
+
+    // TODO use consts from nd
+    let transfer_coins_caveat = (
+        TRANSFER_COINS.to_string(),
+        format!("{}", app_permissions.transfer_coins),
+    );
+    let mutate_caveat = (
+        PERFORM_MUTATIONS.to_string(),
+        format!("{}", app_permissions.perform_mutations),
+    );
+    let balance_caveat = (
+        GET_BALANCE.to_string(),
+        format!("{}", app_permissions.get_balance),
+    );
+
+    token
+        .add_caveat(transfer_coins_caveat, &client_safe_key)
+        .expect("Failed to add transfer caveat to token.");
+    token
+        .add_caveat(mutate_caveat, &client_safe_key)
+        .expect("Failed to add mutate caveat to token.");
+    token
+        .add_caveat(balance_caveat, &client_safe_key)
+        .expect("Failed to add get_balance caveat to token.");
+
     client
         .list_auth_keys_and_version()
         .and_then(move |(_, version)| {
@@ -336,12 +361,6 @@ fn authenticate_new_app(
         .and_then(move |access_container_entry| {
             let access_container_info = c6.access_container();
             let access_container_info = AccessContInfo::from_mdata_info(&access_container_info)?;
-            let mut token = AuthToken::new()?;
-
-            let caveat = ("expire".to_string(), "now".to_string());
-
-            // Sign the token with app keys
-            token.add_caveat(caveat, &client_safe_key)?;
 
             Ok(AuthGranted {
                 token,

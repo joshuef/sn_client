@@ -24,6 +24,7 @@ use safe_core::ffi::ipc::resp::AppAccess;
 use safe_core::ipc::req::AppExchangeInfo as NativeAppExchangeInfo;
 use safe_core::FutureExt;
 use safe_nd::XorName;
+
 use std::os::raw::{c_char, c_void};
 
 /// Application registered in the authenticator.
@@ -224,7 +225,7 @@ mod tests {
     use crate::{config, run};
     use ffi_utils::test_utils::call_0;
     use safe_core::ipc::AuthReq;
-    use safe_nd::IpcError;
+    use safe_nd::{AuthToken, IpcError, GET_BALANCE, PERFORM_MUTATIONS, TRANSFER_COINS};
 
     use std::collections::HashMap;
     use unwrap::unwrap;
@@ -299,7 +300,7 @@ mod tests {
     // 1. Authorise a new app A
     // 2. Check a token was received
     // 3. Verify token is signed.
-    // 4. TODO: Verify token has needed caveats.
+    // 4. Verify token has needed caveats.
     // 5. TODO: Verify app exists in auth container...
     // 6. More?
     #[test]
@@ -317,20 +318,32 @@ mod tests {
             },
         ));
 
-        println!("What did we get back {:?}", &auth_response);
         // we have a token, and it is signed
         // verify the token
         unwrap!(run(&auth, move |client| {
+            let the_token: AuthToken = auth_response.token;
+
             // Verify if the signature is signed by the client and is verifiable by client's public ID
-            assert!(auth_response
-                .token
+            assert!(the_token
                 .is_valid_for_public_id(&client.public_id())
                 .is_ok());
+
             // Verify the contents in the Caveat
-            for (caveat_name, caveat_contents) in auth_response.token.caveats {
-                assert_eq!(caveat_name, "expire".to_string());
-                assert_eq!(caveat_contents, "now".to_string());
+            fn caveat_is_false_checker(contents: String) -> bool {
+                contents.as_str() == "false"
             }
+
+            assert!(the_token
+                .verify_caveat(GET_BALANCE, caveat_is_false_checker)
+                .expect("Failed caveat verification"));
+            assert!(the_token
+                .verify_caveat(PERFORM_MUTATIONS, caveat_is_false_checker)
+                .expect("Failed caveat verification"));
+
+            assert!(the_token
+                .verify_caveat(TRANSFER_COINS, caveat_is_false_checker)
+                .expect("Failed caveat verification"));
+
             Ok(())
         }));
     }

@@ -34,8 +34,8 @@ use safe_core::ffi::error_codes::ERR_NO_SUCH_CONTAINER;
 use safe_core::ffi::ipc::req::AppExchangeInfo as FfiAppExchangeInfo;
 use safe_core::ipc::{self, AuthReq, ContainersReq, IpcMsg, IpcReq, IpcResp, Permission};
 use safe_core::{app_container_name, mdata_info, AuthActions, Client};
-use safe_nd::AppPermissions;
 use safe_nd::IpcError;
+use safe_nd::{AppPermissions, GET_BALANCE, PERFORM_MUTATIONS, TRANSFER_COINS};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::mpsc;
@@ -539,8 +539,24 @@ fn app_authentication() {
     let app_pk = app_keys.public_key();
     let token = auth_granted.token;
 
+    // check the token...
     assert!(!token.signature.is_none());
     // TODO: check caveats against desired perms etc.
+
+    // Check the token caveats are valid
+    fn perm_is_false_checker(contents: String) -> bool {
+        contents.as_str() == "false"
+    }
+
+    assert!(token
+        .verify_caveat(GET_BALANCE, perm_is_false_checker)
+        .expect("Failed to verify balance caveat."));
+    assert!(token
+        .verify_caveat(PERFORM_MUTATIONS, perm_is_false_checker)
+        .expect("Failed to verify mut caveat."));
+    assert!(token
+        .verify_caveat(TRANSFER_COINS, perm_is_false_checker)
+        .expect("Failed to verify transfer caveat."));
 
     test_utils::compare_access_container_entries(
         &authenticator,

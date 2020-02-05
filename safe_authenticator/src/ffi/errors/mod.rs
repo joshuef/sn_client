@@ -201,6 +201,7 @@ fn safe_nd_error_core(err: &SndError) -> i32 {
         SndError::InsufficientBalance => ERR_INSUFFICIENT_BALANCE,
         SndError::ExceededSize => ERR_EXCEEDED_SIZE,
         SndError::InvalidCaveats(_) => ERR_INVALID_CAVEATS,
+        SndError::InvalidToken => ERR_INVALID_TOKEN,
     }
 }
 

@@ -278,6 +278,9 @@ impl Vault {
             debug!("Account not found for {:?}", owner);
             SndError::AccessDenied
         })?;
+
+        // TODO: Check token caveats here....
+
         // Fetches permissions granted to the application
         let perms = account.auth_keys().get(&requester_pk).ok_or_else(|| {
             debug!("App not authorised");
@@ -380,12 +383,12 @@ impl Vault {
     }
 
     #[allow(clippy::cognitive_complexity)]
-    pub fn process_request(
+    pub fn mock_process_request(
         &mut self,
         requester: PublicId,
         message: &Message,
     ) -> SndResult<Message> {
-        let (request, message_id, _token, signature) = if let Message::Request {
+        let (request, message_id, token, signature) = if let Message::Request {
             request,
             message_id,
             token,
@@ -408,10 +411,10 @@ impl Vault {
 
             match request_type {
                 RequestType::PrivateGet | RequestType::Mutation | RequestType::Transaction => {
+                    let account = self.get_account(&requester.name());
                     // For apps, check if its public key is listed as an auth key.
                     if is_app {
-                        let auth_keys = self
-                            .get_account(&requester.name())
+                        let auth_keys = &account
                             .map(|account| (account.auth_keys().clone()))
                             .unwrap_or_else(Default::default);
 
@@ -424,6 +427,32 @@ impl Vault {
                     match signature {
                         Some(sig) => verify_signature(&sig, &requester_pk, &request, &message_id)?,
                         None => return Err(SndError::InvalidSignature),
+                    }
+
+                    if is_app {
+                        // TODO. use the checkers below to _Actually verify perms
+
+                        println!(" is app.... {:?}, {:?}", request_type, token);
+
+                        // verify we have a token, if not access denied
+                        let the_token = match token {
+                            Some(a_token) => a_token,
+                            None => return Err(SndError::AccessDenied),
+                        };
+
+                        trace!("Processing req of App w/ token {:?}", the_token);
+
+                        // Verify the token now we know it's not a public data GET
+                        let token_is_signed_and_valid =
+                            match the_token.is_valid_for_public_key(&owner_pk) {
+                                Ok(validity) => validity,
+                                _ => return Err(SndError::InvalidToken),
+                            };
+                        trace!("The token is valid? {:?}", token_is_signed_and_valid);
+
+                        if !token_is_signed_and_valid {
+                            return Err(SndError::AccessDenied);
+                        }
                     }
                 }
                 RequestType::PublicGet => (),

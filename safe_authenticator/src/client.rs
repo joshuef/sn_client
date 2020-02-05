@@ -448,7 +448,7 @@ impl AuthClient {
                             request,
                             message_id,
                             signature: Some(signature),
-                            token: None,
+                            token: None, // TODO what token should this have?
                         },
                     )
                 })

@@ -35,12 +35,6 @@ pub struct AppClient {
 }
 
 impl AppClient {
-    /// Authentication token
-    pub fn token(&self) -> Option<AuthToken> {
-        let app_inner = self.app_inner.borrow();
-        app_inner.token.clone()
-    }
-
     /// This is a getter-only Gateway function to the Maidsafe network. It will create an
     /// unregistered random client which can do a very limited set of operations, such as a
     /// Network-Get.
@@ -185,6 +179,12 @@ impl AppClient {
 
 impl Client for AppClient {
     type Context = AppContext;
+
+    /// Authentication token
+    fn token(&self) -> Option<AuthToken> {
+        let app_inner = self.app_inner.borrow();
+        app_inner.token.clone()
+    }
 
     fn full_id(&self) -> SafeKey {
         let app_inner = self.app_inner.borrow();

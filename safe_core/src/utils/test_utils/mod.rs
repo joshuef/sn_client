@@ -12,7 +12,7 @@ mod sync;
 #[cfg(feature = "mock-network")]
 pub use self::sync::Synchronizer;
 
-use crate::client::core_client::CoreClient;
+use crate::client::core_client::TestCoreClient;
 use crate::client::{Client, COST_OF_PUT};
 use crate::event_loop::{self, CoreMsg, CoreMsgTx};
 use crate::network_event::{NetworkEvent, NetworkTx};
@@ -22,7 +22,7 @@ use futures::sync::mpsc;
 use futures::{Future, IntoFuture};
 use log::trace;
 use rand;
-use safe_nd::{AppFullId, ClientFullId, ClientPublicId, Coins, Keypair};
+use safe_nd::{AppFullId, AuthToken, ClientFullId, ClientPublicId, Coins, Keypair, SafeKey};
 use std::fmt::Debug;
 use std::sync::mpsc as std_mpsc;
 use tokio::runtime::current_thread::{Handle, Runtime};
@@ -51,11 +51,23 @@ pub fn finish() -> Result<(), ()> {
     Ok(())
 }
 
+/// Generate a token with base caveat
+pub fn test_generate_signed_token(safe_key: SafeKey) -> AuthToken {
+    let mut token = AuthToken::new().unwrap();
+
+    // let safe_key = SafeKey::app( client_id  );
+    let caveat = ("expire".to_string(), "nowthen".to_string());
+
+    token.add_caveat(caveat, &safe_key).unwrap();
+    println!("Generated test token..........");
+    token
+}
+
 /// Create random registered client and run it inside an event loop. Use this to
-/// create a `CoreClient` automatically and randomly.
+/// create a `TestCoreClient` automatically and randomly.
 pub fn random_client<Run, I, T, E>(r: Run) -> T
 where
-    Run: FnOnce(&CoreClient) -> I + Send + 'static,
+    Run: FnOnce(&TestCoreClient) -> I + Send + 'static,
     I: IntoFuture<Item = T, Error = E> + 'static,
     T: Send + 'static,
     E: Debug,
@@ -66,7 +78,7 @@ where
     let c = |el_h, core_tx, net_tx| {
         let acc_locator = unwrap!(utils::generate_random_string(10));
         let acc_password = unwrap!(utils::generate_random_string(10));
-        CoreClient::new(&acc_locator, &acc_password, el_h, core_tx, net_tx)
+        TestCoreClient::new(&acc_locator, &acc_password, el_h, core_tx, net_tx)
     };
     setup_client_with_net_obs(&(), c, n, r)
 }

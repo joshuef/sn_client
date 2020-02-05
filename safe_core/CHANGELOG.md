@@ -49,7 +49,7 @@
 
 ## [0.31.0]
 - Refactor `Client` struct to a trait for a better separation of concerns
-- Implement `CoreClient` as a bare-bones network client for tests
+- Implement `TestCoreClient` as a bare-bones network client for tests
 - Move Authenticator-related `Client` functions to `safe_authenticator`
 
 ## [0.30.0]

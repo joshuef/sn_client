@@ -65,7 +65,6 @@ pub fn create_app_by_req(auth_req: &NativeAuthReq) -> Result<App, AppError> {
             _ => AppError::Unexpected(format!("{}", error)),
         })?;
     trace!("Succesfully registered app: {:?}", auth_granted);
-
     App::registered(auth_req.app.id.clone(), auth_granted, || ())
 }
 

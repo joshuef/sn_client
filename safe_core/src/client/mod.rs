@@ -25,8 +25,6 @@ pub use self::mdata_info::MDataInfo;
 pub use self::mock::vault::mock_vault_path;
 #[cfg(feature = "mock-network")]
 pub use self::mock::ConnectionManager as MockConnectionManager;
-use safe_nd::SafeKey;
-
 #[cfg(feature = "mock-network")]
 use self::mock::ConnectionManager;
 use crate::config_handler::Config;
@@ -38,6 +36,8 @@ use crate::event_loop::{CoreFuture, CoreMsgTx};
 use crate::ipc::BootstrapConfig;
 use crate::network_event::{NetworkEvent, NetworkTx};
 use crate::utils::FutureExt;
+use safe_nd::SafeKey;
+
 use futures::{future, sync::mpsc, Future};
 use lazy_static::lazy_static;
 use log::trace;
@@ -45,9 +45,9 @@ use lru_cache::LruCache;
 use safe_nd::{
     AData, ADataAddress, ADataAppendOperation, ADataEntries, ADataEntry, ADataIndex, ADataIndices,
     ADataOwner, ADataPermissions, ADataPubPermissionSet, ADataPubPermissions,
-    ADataUnpubPermissionSet, ADataUnpubPermissions, ADataUser, AppPermissions, ClientFullId, Coins,
-    IData, IDataAddress, LoginPacket, MData, MDataAddress, MDataEntries, MDataEntryActions,
-    MDataPermissionSet, MDataSeqEntries, MDataSeqEntryActions, MDataSeqValue,
+    ADataUnpubPermissionSet, ADataUnpubPermissions, ADataUser, AppPermissions, AuthToken,
+    ClientFullId, Coins, IData, IDataAddress, LoginPacket, MData, MDataAddress, MDataEntries,
+    MDataEntryActions, MDataPermissionSet, MDataSeqEntries, MDataSeqEntryActions, MDataSeqValue,
     MDataUnseqEntryActions, MDataValue, MDataValues, Message, MessageId, PublicId, PublicKey,
     Request, RequestType, Response, SeqMutableData, Transaction, UnseqMutableData, XorName,
 };
@@ -139,6 +139,11 @@ pub trait Client: Clone + 'static {
     /// Associated message type.
     type Context;
 
+    /// Return the app token or None if nonexistant. (Expected to be None for anything not AppClient)
+    fn token(&self) -> Option<AuthToken> {
+        None
+    }
+
     /// Return the client's ID.
     fn full_id(&self) -> SafeKey;
 
@@ -180,7 +185,6 @@ pub trait Client: Clone + 'static {
     /// This function adds the requester signature and message ID.
     fn compose_message(&self, request: Request, sign: bool) -> Message {
         let message_id = MessageId::new();
-
         let signature = if sign {
             Some(
                 self.full_id()
@@ -192,9 +196,9 @@ pub trait Client: Clone + 'static {
 
         Message::Request {
             request,
-            token: None, // TODO: ensure overriden where relevant
             message_id,
             signature,
+            token: self.token(),
         }
     }
 
@@ -1131,6 +1135,7 @@ where
 }
 
 /// Create a new mock balance at an arbitrary address.
+#[cfg(any(test, feature = "testing"))]
 pub fn test_create_balance(owner: &ClientFullId, amount: Coins) -> Result<(), CoreError> {
     trace!("Create test balance of {} for {:?}", amount, owner);
 
@@ -1194,6 +1199,7 @@ pub fn wallet_create_balance(
                 new_balance_owner,
                 amount,
                 transaction_id,
+                //token: None // TODO: pass in token here
             },
             &full_id,
         )?;
@@ -1361,7 +1367,7 @@ pub fn get_priority_response(
             request,
             message_id,
             signature: Some(signature),
-            token: None, // TODO, this should probably need a token
+            token: None,
         },
     ))
 }

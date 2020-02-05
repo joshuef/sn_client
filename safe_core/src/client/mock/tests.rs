@@ -14,19 +14,19 @@ use crate::client::mock::vault::Vault;
 use crate::client::COST_OF_PUT;
 use safe_nd::SafeKey;
 
-use crate::config_handler::{Config, DevConfig};
-use crate::utils::test_utils::{gen_app_id, gen_client_id};
-use crate::{utils, NetworkEvent, QuicP2pConfig};
-
 use super::connection_manager::ConnectionManager;
 use crate::btree_map;
+use crate::config_handler::{Config, DevConfig};
+use crate::utils::test_utils::test_generate_signed_token;
+use crate::utils::test_utils::{gen_app_id, gen_client_id};
+use crate::{utils, NetworkEvent, QuicP2pConfig};
 use bincode::serialize;
 use futures::sync::mpsc::{self, UnboundedReceiver};
 use futures::Future;
 use rand::thread_rng;
 use safe_nd::{
-    ADataPubPermissionSet, AppFullId, AppPermissions, ClientFullId, Coins, Error, IData, MData,
-    MDataAction, MDataAddress, MDataEntries, MDataEntryActions, MDataPermissionSet,
+    ADataPubPermissionSet, AppFullId, AppPermissions, AuthToken, ClientFullId, Coins, Error, IData,
+    MData, MDataAction, MDataAddress, MDataEntries, MDataEntryActions, MDataPermissionSet,
     MDataSeqEntryAction, MDataSeqEntryActions, MDataSeqValue, MDataValue, MDataValues, Message,
     MessageId, PubImmutableData, PublicId, PublicKey, Request, RequestType, Response,
     SeqMutableData, UnpubImmutableData, UnseqMutableData, XorName,
@@ -43,23 +43,25 @@ use unwrap::unwrap;
 // Helper macro to fetch the response for a request and
 // assert that the expected error is returned.
 macro_rules! send_req_expect_failure {
-    ($cm:expr, $sender:expr, $req:expr, $err:path) => {
+    ($cm:expr, $sender:expr, $token:expr, $req:expr, $err:path) => {
         let expected_response = $req.error_response($err);
-        let response = process_request($cm, $sender, $req);
+        let response = test_process_request($cm, $sender, $token, $req);
         assert_eq!(response, expected_response);
     };
 }
 
 macro_rules! send_req_expect_ok {
-    ($cm:expr, $sender:expr, $req:expr, $res:expr) => {
-        let response = process_request($cm, $sender, $req);
+    ($cm:expr, $sender:expr, $token:expr, $req:expr, $res:expr) => {
+        let response = test_process_request($cm, $sender, $token, $req);
         assert_eq!($res, unwrap!(response.try_into()));
     };
 }
 
-fn process_request(
+/// Pass request to test connection manager
+fn test_process_request(
     connection_manager: &mut ConnectionManager,
     sender: &SafeKey,
+    token: Option<AuthToken>,
     request: Request,
 ) -> Response {
     let sign = request.get_type() != RequestType::PublicGet;
@@ -69,11 +71,12 @@ fn process_request(
     } else {
         None
     };
+
     let message = Message::Request {
         request,
         message_id,
         signature,
-        token: None, // TODO: Does this need a token?
+        token,
     };
     unwrap!(connection_manager
         .send(&sender.public_id(), &message)
@@ -94,6 +97,7 @@ fn immutable_data_basics() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         get_request.clone(),
         Error::NoSuchData
     );
@@ -103,6 +107,7 @@ fn immutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         put_request.clone(),
         ()
     );
@@ -111,6 +116,7 @@ fn immutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         get_request.clone(),
         orig_data
     );
@@ -121,17 +127,25 @@ fn immutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetBalance,
         balance
     );
 
     // Subsequent PutIData for same data should succeed - De-duplication
-    send_req_expect_ok!(&mut connection_manager, &client_safe_key, put_request, ());
+    send_req_expect_ok!(
+        &mut connection_manager,
+        &client_safe_key,
+        None,
+        put_request,
+        ()
+    );
 
     // GetIData should succeed
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         get_request,
         orig_data
     );
@@ -141,6 +155,7 @@ fn immutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetBalance,
         balance
     );
@@ -162,6 +177,7 @@ fn mutable_data_basics() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMDataVersion(data1_address),
         Error::NoSuchData
     );
@@ -169,6 +185,7 @@ fn mutable_data_basics() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataEntries(data1_address),
         Error::NoSuchData
     );
@@ -177,6 +194,7 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data.into()),
         ()
     );
@@ -190,14 +208,16 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data2.clone()),
         ()
     );
 
     // GetMDataVersion should respond with 0
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMDataVersion(data2_address),
     );
     assert_eq!(response, Response::GetMDataVersion(Ok(0)));
@@ -206,6 +226,7 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMData(data2_address),
         data2
     );
@@ -215,6 +236,7 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataEntries(data2_address),
         MDataEntries::from(BTreeMap::<_, MDataSeqValue>::new())
     );
@@ -222,6 +244,7 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataKeys(data2_address),
         BTreeSet::new()
     );
@@ -229,6 +252,7 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataValues(data2_address),
         MDataValues::from(Vec::<MDataSeqValue>::new())
     );
@@ -254,6 +278,7 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address: data2_address,
             actions: actions.into()
@@ -261,9 +286,10 @@ fn mutable_data_basics() {
         ()
     );
 
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataEntries(data2_address),
     );
     let entries: MDataEntries = unwrap!(response.try_into());
@@ -287,14 +313,16 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataEntries(data1_address),
         MDataEntries::from(BTreeMap::<_, MDataSeqValue>::new())
     );
 
     // ListMDataKeys
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataKeys(data2_address),
     );
     match response {
@@ -308,9 +336,10 @@ fn mutable_data_basics() {
     }
 
     // ListMDataValues
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataValues(data2_address),
     );
     match response {
@@ -325,6 +354,7 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMDataValue {
             address: data2_address,
             key: key0.to_vec()
@@ -340,6 +370,7 @@ fn mutable_data_basics() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMDataValue {
             address: data2_address,
             key: key2.to_vec()
@@ -366,6 +397,7 @@ fn mutable_data_basics() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address: data2_address,
             actions: actions.into()
@@ -373,9 +405,10 @@ fn mutable_data_basics() {
         ()
     );
 
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataEntries(data2_address),
     );
     let entries: MDataEntries = unwrap!(response.try_into());
@@ -418,6 +451,7 @@ fn mutable_data_reclaim() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data.into()),
         ()
     );
@@ -436,6 +470,7 @@ fn mutable_data_reclaim() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into()
@@ -454,6 +489,7 @@ fn mutable_data_reclaim() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into()
@@ -462,9 +498,10 @@ fn mutable_data_reclaim() {
     );
 
     // GetMDataVersion should respond with 0 as the mdata itself hasn't changed.
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMDataVersion(address),
     );
     assert_eq!(response, Response::GetMDataVersion(Ok(0)));
@@ -475,9 +512,10 @@ fn mutable_data_reclaim() {
     ]
     .into();
 
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -498,6 +536,7 @@ fn mutable_data_reclaim() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into()
@@ -522,6 +561,7 @@ fn mutable_data_entry_versioning() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data.into()),
         ()
     );
@@ -540,6 +580,7 @@ fn mutable_data_entry_versioning() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -557,9 +598,10 @@ fn mutable_data_entry_versioning() {
     ]
     .into();
 
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -574,9 +616,10 @@ fn mutable_data_entry_versioning() {
     // Attempt to update it with incorrect version fails.
     let actions: MDataSeqEntryActions =
         MDataSeqEntryActions::new().update(key.to_vec(), value_v1.clone(), 314_159_265);
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -600,6 +643,7 @@ fn mutable_data_entry_versioning() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -613,9 +657,10 @@ fn mutable_data_entry_versioning() {
     ]
     .into();
 
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -636,6 +681,7 @@ fn mutable_data_entry_versioning() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -663,18 +709,22 @@ fn mutable_data_permissions() {
     let data = SeqMutableData::new_with_data(name, tag, entries, Default::default(), owner_key);
     let address: MDataAddress = *data.address();
 
+    let token_signed_by_client = Some(test_generate_signed_token(client_safe_key.clone()));
+
     // Put it to the network.
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        token_signed_by_client.clone(),
         Request::PutMData(data.into()),
         ()
     );
 
     // ListMDataPermissions responds with empty collection.
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListMDataPermissions(address),
     );
     let permissions: BTreeMap<PublicKey, MDataPermissionSet> = unwrap!(response.try_into());
@@ -686,6 +736,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        token_signed_by_client.clone(),
         Request::MutateMDataEntries {
             address,
             actions: actions.into()
@@ -694,7 +745,7 @@ fn mutable_data_permissions() {
     );
 
     // Create app and authorise it.
-    let (app_safe_key, mut connection_manager2, _) = register_new_app(
+    let (app_safe_key, mut connection_manager2, _) = test_register_new_app(
         &mut connection_manager,
         &client_safe_key,
         AppPermissions {
@@ -714,6 +765,7 @@ fn mutable_data_permissions() {
     send_req_expect_failure!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         mutation_request.clone(),
         Error::AccessDenied
     );
@@ -731,6 +783,7 @@ fn mutable_data_permissions() {
     send_req_expect_failure!(
         &mut connection_manager,
         &app_safe_key,
+        token_signed_by_client.clone(),
         update_perms_req.clone(),
         Error::AccessDenied
     );
@@ -740,6 +793,7 @@ fn mutable_data_permissions() {
     send_req_expect_failure!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         mutation_request.clone(),
         Error::AccessDenied
     );
@@ -748,14 +802,16 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        token_signed_by_client.clone(),
         update_perms_req,
         ()
     );
 
     // The version is bumped.
-    let response = process_request(
+    let response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMDataVersion(address),
     );
     assert_eq!(response, Response::GetMDataVersion(Ok(1)));
@@ -779,6 +835,7 @@ fn mutable_data_permissions() {
     send_req_expect_failure!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         insertion_request.clone(),
         Error::AccessDenied
     );
@@ -795,6 +852,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -817,6 +875,7 @@ fn mutable_data_permissions() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
+        token_signed_by_client.clone(),
         invalid_update_perms_req,
         error
     );
@@ -831,6 +890,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        token_signed_by_client.clone(),
         valid_update_perms_req,
         ()
     );
@@ -839,6 +899,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         insertion_request,
         ()
     );
@@ -847,6 +908,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager2,
         &client_safe_key,
+        token_signed_by_client.clone(),
         Request::DelMDataUserPermissions {
             address,
             user: app_safe_key.public_key(),
@@ -859,6 +921,7 @@ fn mutable_data_permissions() {
     send_req_expect_failure!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         mutation_request.clone(),
         Error::AccessDenied
     );
@@ -868,6 +931,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        token_signed_by_client.clone(),
         Request::SetMDataUserPermissions {
             address,
             user: app_safe_key.public_key(),
@@ -881,6 +945,7 @@ fn mutable_data_permissions() {
     send_req_expect_failure!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         mutation_request,
         Error::AccessDenied
     );
@@ -890,6 +955,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         Request::SetMDataUserPermissions {
             address,
             user: app_safe_key.public_key(),
@@ -905,6 +971,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client,
         Request::MutateMDataEntries {
             address,
             actions: actions.into()
@@ -920,7 +987,7 @@ fn mutable_data_ownership() {
     let (mut connection_manager, _, client_safe_key, owner_key) = setup(None);
 
     // Create app's connection_manager
-    let (app_safe_key, mut connection_manager2, _) = register_new_app(
+    let (app_safe_key, mut connection_manager2, _) = test_register_new_app(
         &mut connection_manager,
         &client_safe_key,
         AppPermissions {
@@ -930,6 +997,8 @@ fn mutable_data_ownership() {
         },
     );
 
+    let token_signed_by_client = Some(test_generate_signed_token(client_safe_key));
+
     // Attempt to put MutableData using the app sign key as owner key should fail.
     let name = rand::random();
     let tag = 1000u64;
@@ -937,6 +1006,7 @@ fn mutable_data_ownership() {
     send_req_expect_failure!(
         &mut connection_manager2,
         &app_safe_key,
+        token_signed_by_client.clone(),
         Request::PutMData(SeqMutableData::new(name, tag, app_safe_key.public_key()).into()),
         Error::InvalidOwners
     );
@@ -947,6 +1017,7 @@ fn mutable_data_ownership() {
     send_req_expect_ok!(
         &mut connection_manager,
         &app_safe_key,
+        token_signed_by_client,
         Request::PutMData(data),
         ()
     );
@@ -966,7 +1037,13 @@ fn pub_idata_rpc() {
     // Put pub idata as an owner. Should succeed.
     {
         let put_request = Request::PutIData(orig_data.clone());
-        send_req_expect_ok!(&mut connection_manager, &client_safe_key, put_request, ());
+        send_req_expect_ok!(
+            &mut connection_manager,
+            &client_safe_key,
+            None,
+            put_request,
+            ()
+        );
     }
 
     // Get pub idata. Should succeed.
@@ -974,6 +1051,7 @@ fn pub_idata_rpc() {
         send_req_expect_ok!(
             &mut connection_manager,
             &client_safe_key,
+            None,
             get_request.clone(),
             orig_data.clone()
         );
@@ -986,11 +1064,17 @@ fn pub_idata_rpc() {
     };
 
     let (app_key, mut app_conn_manager, _) =
-        register_new_app(&mut connection_manager2, &client2_safe_key, app_perms);
+        test_register_new_app(&mut connection_manager2, &client2_safe_key, app_perms);
 
     // Get pub idata while not being an owner. Should succeed.
     {
-        send_req_expect_ok!(&mut app_conn_manager, &app_key, get_request, orig_data);
+        send_req_expect_ok!(
+            &mut app_conn_manager,
+            &app_key,
+            None,
+            get_request,
+            orig_data
+        );
     }
 }
 
@@ -1005,7 +1089,13 @@ fn unpub_idata_rpc() {
     // Construct put request.
     {
         let put_request = Request::PutIData(data.clone());
-        send_req_expect_ok!(&mut connection_manager, &client_safe_key, put_request, ());
+        send_req_expect_ok!(
+            &mut connection_manager,
+            &client_safe_key,
+            None,
+            put_request,
+            ()
+        );
     }
 
     // Construct get request.
@@ -1013,6 +1103,7 @@ fn unpub_idata_rpc() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         get_request.clone(),
         data
     );
@@ -1025,12 +1116,13 @@ fn unpub_idata_rpc() {
 
     let (mut conn_manager2, _, client2_safe_key, _) = setup(None);
     let (app_key, mut app_conn_manager, _) =
-        register_new_app(&mut conn_manager2, &client2_safe_key, app_perms);
+        test_register_new_app(&mut conn_manager2, &client2_safe_key, app_perms);
 
     // Try to get unpub idata while not being an owner. Should fail.
     send_req_expect_failure!(
         &mut app_conn_manager,
         &app_key,
+        None,
         get_request,
         Error::AccessDenied
     );
@@ -1040,6 +1132,7 @@ fn unpub_idata_rpc() {
     send_req_expect_failure!(
         &mut app_conn_manager,
         &app_key,
+        None,
         del_request,
         Error::AccessDenied
     );
@@ -1058,6 +1151,7 @@ fn unpub_md() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data.clone()),
         ()
     );
@@ -1066,6 +1160,7 @@ fn unpub_md() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMData(*data.address()),
         data
     );
@@ -1077,9 +1172,10 @@ fn auth_keys() {
     let (mut connection_manager, _, client_safe_key, _) = setup(None);
 
     // Initially, the list of auth keys should be empty and the version should be zero.
-    let mut response = process_request(
+    let mut response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListAuthKeysAndVersion,
     );
     let (keys, version): (BTreeMap<_, _>, u64) = unwrap!(response.try_into());
@@ -1104,6 +1200,7 @@ fn auth_keys() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         test_ins_auth_key_req,
         error
     );
@@ -1122,13 +1219,15 @@ fn auth_keys() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         ins_auth_key_req,
         ()
     );
 
-    response = process_request(
+    response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListAuthKeysAndVersion,
     );
 
@@ -1156,6 +1255,7 @@ fn auth_keys() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         test_del_auth_key_req,
         error
     );
@@ -1171,6 +1271,7 @@ fn auth_keys() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         test1_del_auth_key_req,
         Error::NoSuchKey
     );
@@ -1184,14 +1285,16 @@ fn auth_keys() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         del_auth_key_req,
         ()
     );
 
     // Retrieve the list of auth keys and version
-    response = process_request(
+    response = test_process_request(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::ListAuthKeysAndVersion,
     );
 
@@ -1220,7 +1323,7 @@ fn auth_actions_from_app() {
 
     // Creates an App instance
     let (app_key, mut app_conn_manager, _) =
-        register_new_app(&mut connection_manager, &client_safe_key, app_perms);
+        test_register_new_app(&mut connection_manager, &client_safe_key, app_perms);
 
     let name = XorName(rand::random());
     let tag = 15002;
@@ -1241,6 +1344,7 @@ fn auth_actions_from_app() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data.clone()),
         ()
     );
@@ -1249,6 +1353,7 @@ fn auth_actions_from_app() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
+        None,
         Request::GetMData(address),
         data
     );
@@ -1257,6 +1362,7 @@ fn auth_actions_from_app() {
     send_req_expect_failure!(
         &mut app_conn_manager,
         &app_key,
+        None,
         Request::DeleteMData(address),
         Error::AccessDenied
     );
@@ -1265,6 +1371,7 @@ fn auth_actions_from_app() {
     send_req_expect_failure!(
         &mut app_conn_manager,
         &app_key,
+        None,
         Request::ListAuthKeysAndVersion,
         Error::AccessDenied
     );
@@ -1273,6 +1380,7 @@ fn auth_actions_from_app() {
     send_req_expect_failure!(
         &mut app_conn_manager,
         &app_key,
+        None,
         Request::DelAuthKey {
             key: app_key.public_key(),
             version: 1,
@@ -1304,6 +1412,7 @@ fn low_balance_check() {
         send_req_expect_ok!(
             &mut connection_manager,
             &client_safe_key,
+            None,
             Request::PutMData(data.clone()),
             ()
         );
@@ -1311,9 +1420,10 @@ fn low_balance_check() {
         let vec_data = unwrap!(utils::generate_random_vector(10));
         let idata: IData = PubImmutableData::new(vec_data).into();
 
-        let rpc_response = process_request(
+        let rpc_response = test_process_request(
             &mut connection_manager,
             &client_safe_key,
+            None,
             Request::GetBalance,
         );
         let balance: Coins = match rpc_response {
@@ -1323,13 +1433,15 @@ fn low_balance_check() {
 
         // Exhaust the account balance by transferring everything to a new wallet
         let new_balance_owner: PublicKey = SecretKey::random().public_key().into();
-        let response = process_request(
+        let response = test_process_request(
             &mut connection_manager,
             &client_safe_key,
+            None,
             Request::CreateBalance {
                 new_balance_owner,
                 amount: unwrap!(balance.checked_sub(*COST_OF_PUT)),
                 transaction_id: rand::random(),
+                //                token: Some( test_generate_signed_token(client_safe_key.clone()) )
             },
         );
 
@@ -1338,9 +1450,10 @@ fn low_balance_check() {
             x => panic!("Unexpected Error {:?}", x),
         }
 
-        let response = process_request(
+        let response = test_process_request(
             &mut connection_manager,
             &client_safe_key,
+            None,
             Request::PutIData(idata.clone()),
         );
         match response {
@@ -1352,6 +1465,7 @@ fn low_balance_check() {
         send_req_expect_ok!(
             &mut connection_manager,
             &client_safe_key,
+            None,
             Request::GetMData(*data.address()),
             data
         );
@@ -1418,6 +1532,7 @@ fn config_mock_vault_path() {
     send_req_expect_ok!(
         &mut conn_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data.clone()),
         ()
     );
@@ -1426,6 +1541,7 @@ fn config_mock_vault_path() {
     send_req_expect_ok!(
         &mut conn_manager,
         &client_safe_key,
+        None,
         Request::GetMData(*data.address()),
         data
     );
@@ -1463,6 +1579,7 @@ fn request_hooks() {
     send_req_expect_ok!(
         &mut conn_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data.clone().into()),
         ()
     );
@@ -1471,6 +1588,7 @@ fn request_hooks() {
     send_req_expect_failure!(
         &mut conn_manager,
         &client_safe_key,
+        None,
         Request::GetMDataVersion(*data.address()),
         Error::NoSuchData
     );
@@ -1484,6 +1602,7 @@ fn request_hooks() {
     send_req_expect_ok!(
         &mut conn_manager,
         &client_safe_key,
+        None,
         Request::PutMData(data2.clone().into()),
         ()
     );
@@ -1507,6 +1626,7 @@ fn request_hooks() {
     send_req_expect_failure!(
         &mut conn_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address: *data2.address(),
             actions: actions.clone(),
@@ -1520,6 +1640,7 @@ fn request_hooks() {
     send_req_expect_ok!(
         &mut conn_manager,
         &client_safe_key,
+        None,
         Request::MutateMDataEntries {
             address: *data2.address(),
             actions: actions,
@@ -1570,16 +1691,17 @@ fn register_client(
 // Register a new app for an account with the given permissions.
 // Return the app's safe key and it's connection manager along with the reciever
 // for network events.
-fn register_new_app(
+fn test_register_new_app(
     conn_manager: &mut ConnectionManager,
     client_safe_key: &SafeKey,
     permissions: AppPermissions,
 ) -> (SafeKey, ConnectionManager, UnboundedReceiver<NetworkEvent>) {
     let client_id = unwrap!(client_safe_key.public_id().client_public_id()).clone();
     let app_full_id = gen_app_id(client_id);
-    let response = process_request(
+    let response = test_process_request(
         conn_manager,
         client_safe_key,
+        None,
         Request::ListAuthKeysAndVersion,
     );
     let (_, version): (_, u64) = unwrap!(response.try_into());
@@ -1587,6 +1709,7 @@ fn register_new_app(
     send_req_expect_ok!(
         conn_manager,
         client_safe_key,
+        None,
         Request::InsAuthKey {
             key: *app_full_id.public_id().public_key(),
             version: version + 1,

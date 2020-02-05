@@ -92,7 +92,7 @@ impl ConnectionManager {
                 _ => false,
             };
             let mut vault = vault::lock(&self.vault, writing);
-            unwrap!(vault.process_request(pub_id.clone(), &msg))
+            unwrap!(vault.mock_process_request(pub_id.clone(), &msg))
         };
 
         // Send response back to a client

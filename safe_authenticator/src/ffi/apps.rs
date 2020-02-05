@@ -325,7 +325,7 @@ mod tests {
 
             // Verify if the signature is signed by the client and is verifiable by client's public ID
             assert!(the_token
-                .is_valid_for_public_id(&client.public_id())
+                .is_valid_for_public_key(&client.public_id().public_key())
                 .is_ok());
 
             // Verify the contents in the Caveat

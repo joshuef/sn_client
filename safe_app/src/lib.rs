@@ -43,8 +43,8 @@ pub use safe_core::{
 };
 pub use safe_nd::PubImmutableData;
 
+use log::trace;
 // Export FFI interface.
-
 pub use crate::ffi::access_container::*;
 pub use crate::ffi::cipher_opt::*;
 pub use crate::ffi::crypto::*;
@@ -180,6 +180,7 @@ impl App {
             bootstrap_config,
             ..
         } = auth_granted;
+
         let enc_key = app_keys.enc_key.clone();
         let owner_key = *app_keys.app_full_id.public_id().owner().public_key();
 
@@ -410,6 +411,8 @@ fn refresh_access_info(context: Rc<Registered>, client: &AppClient) -> Box<AppFu
         &context.sym_enc_key,
         &context.access_container_info.nonce,
     ));
+
+    trace!("Refreshing access info, token found: {:?}", &client.token());
 
     client
         .get_seq_mdata_value(

@@ -228,7 +228,6 @@ fn authenticated_app(
     let bootstrap_config = fry!(client::bootstrap_config());
 
     // TODO: Here, we should regenerate a token based upon reqs...
-
     access_container::fetch_entry(client, &app_id, app_keys.clone())
         .and_then(move |(_version, perms)| {
             let perms = perms.unwrap_or_else(AccessContainerEntry::default);
@@ -254,7 +253,9 @@ fn authenticated_app(
 
             // TODO: Add caveats as makes sense...
             // (where to get them from ? )
-            let token = AuthToken::new()?;
+            let token = AuthToken::new().expect("Problems creating new token");
+
+            trace!("Token retrieved from existing app, {:?}", token);
 
             Ok(AuthGranted {
                 token,
@@ -299,7 +300,6 @@ fn authenticate_new_app(
 
     let mut token = AuthToken::new().expect("Error creating new token.");
 
-    // TODO use consts from nd
     let transfer_coins_caveat = (
         TRANSFER_COINS.to_string(),
         format!("{}", app_permissions.transfer_coins),

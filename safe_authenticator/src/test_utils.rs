@@ -90,20 +90,6 @@ pub fn init_log() {
         .try_init();
 }
 
-/*
-/// Generate a token with base caveat
-pub fn generate_signed_token(app_keys: AppKeys) -> AuthToken {
-        let mut token = AuthToken::new().unwrap();
-
-        let full_id = FullId::App(app_keys.app_full_id);
-        let caveat = ("expire".to_string(), "nowthen".to_string());
-
-        token.add_caveat(caveat, &full_id).unwrap();
-
-        token
-}
-*/
-
 /// Creates a new random account for authenticator. Returns the `Authenticator`
 /// instance and the locator and password strings.
 pub fn create_authenticator() -> (Authenticator, String, String) {

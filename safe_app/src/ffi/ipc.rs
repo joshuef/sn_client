@@ -981,20 +981,6 @@ mod tests {
         }
     }
 
-    /*
-    /// Generate a token with base caveat
-    fn generate_signed_token(app_keys: AppKeys) -> AuthToken {
-        let mut token = AuthToken::new().unwrap();
-
-
-        let caveat = ("expire".to_string(), "nowthen".to_string());
-
-        token.add_caveat(caveat, &full_id).unwrap();
-
-        token
-    }
-    */
-
     struct Context {
         unexpected_cb: bool,
         req_id: u32,

@@ -80,6 +80,11 @@ fn get_access_info() {
     let _ = container_permissions.insert("_downloads".to_string(), btree_set![Permission::Insert]);
 
     let auth_req = create_auth_req(None, Some(container_permissions));
+
+    println!(
+        "Getting auth req as part of access info req: {:?}",
+        auth_req
+    );
     let auth_req_ffi = unwrap!(auth_req.into_repr_c());
 
     let app: *mut App = unsafe {
@@ -224,6 +229,8 @@ fn app_container_creation() {
         let app = authorise_app(&auth, &app_info, &app_id, true);
         assert_eq!(num_containers(&app), 1); // should only contain app container
     }
+
+    println!("MIDDDDDDDDDDDDDDDDDDDDD");
 
     trace!("Making sure no mutations are done when re-authorising the app now.");
     let orig_balance: Coins = unwrap!(auth_run(&auth, |client| {

@@ -19,6 +19,7 @@ use crate::event_loop::CoreMsgTx;
 use crate::ipc::BootstrapConfig;
 use crate::network_event::NetworkTx;
 use crate::utils;
+
 use log::trace;
 use lru_cache::LruCache;
 use rand::rngs::StdRng;
@@ -33,12 +34,12 @@ use tokio::runtime::current_thread::{block_on_all, Handle};
 use unwrap::unwrap;
 
 /// Barebones Client object used for testing purposes.
-pub struct CoreClient {
-    inner: Rc<RefCell<Inner<CoreClient, ()>>>,
+pub struct TestCoreClient {
+    inner: Rc<RefCell<Inner<TestCoreClient, ()>>>,
     keys: ClientKeys,
 }
 
-impl CoreClient {
+impl TestCoreClient {
     /// This will create a basic Client object which is sufficient only for testing purposes.
     pub fn new(
         acc_locator: &str,
@@ -155,7 +156,7 @@ impl CoreClient {
     }
 }
 
-impl Client for CoreClient {
+impl Client for TestCoreClient {
     type Context = ();
 
     fn full_id(&self) -> SafeKey {
@@ -187,11 +188,11 @@ impl Client for CoreClient {
     }
 }
 
-impl AuthActions for CoreClient {}
+impl AuthActions for TestCoreClient {}
 
-impl Clone for CoreClient {
+impl Clone for TestCoreClient {
     fn clone(&self) -> Self {
-        CoreClient {
+        TestCoreClient {
             inner: Rc::clone(&self.inner),
             keys: self.keys.clone(),
         }

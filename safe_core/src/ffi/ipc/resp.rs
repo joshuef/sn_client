@@ -8,7 +8,6 @@
 
 // All the FFI array types must be imported at the file
 // level for safe_bindgen to parse correctly
-// use crate::auth_token::Caveat;
 use crate::ffi::arrays::*;
 use crate::ffi::ipc::req::PermissionSet;
 use crate::ffi::MDataInfo;

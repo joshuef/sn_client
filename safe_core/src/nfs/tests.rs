@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::btree_map;
-use crate::client::core_client::CoreClient;
+use crate::client::core_client::TestCoreClient;
 use crate::client::MDataInfo;
 use crate::crypto::shared_secretbox;
 use crate::errors::CoreError;
@@ -33,7 +33,7 @@ const ORIG_SIZE: usize = 5555;
 const NEW_SIZE: usize = 50;
 
 fn create_test_file_with_size(
-    client: &CoreClient,
+    client: &TestCoreClient,
     published: bool,
     size: usize,
 ) -> Box<NfsFuture<(MDataInfo, File)>> {
@@ -67,7 +67,7 @@ fn create_test_file_with_size(
         .into_box()
 }
 
-fn create_test_file(client: &CoreClient, published: bool) -> Box<NfsFuture<(MDataInfo, File)>> {
+fn create_test_file(client: &TestCoreClient, published: bool) -> Box<NfsFuture<(MDataInfo, File)>> {
     create_test_file_with_size(client, published, ORIG_SIZE)
 }
 
@@ -324,7 +324,7 @@ fn file_read_chunks() {
                     },
                 )
                 .then(
-                    move |res: Result<(Reader<CoreClient>, u64, Vec<u8>), NfsError>| {
+                    move |res: Result<(Reader<TestCoreClient>, u64, Vec<u8>), NfsError>| {
                         let (reader, size_read, result) = unwrap!(res);
 
                         assert_eq!(size, size_read);
@@ -403,7 +403,7 @@ fn file_write_chunks() {
                 .map(move |writer| (writer, dir))
             })
             .then(
-                move |res: Result<(Writer<CoreClient>, MDataInfo), NfsError>| {
+                move |res: Result<(Writer<TestCoreClient>, MDataInfo), NfsError>| {
                     let (writer, dir) = unwrap!(res);
                     // Write 0 bytes, should succeed
                     writer
@@ -450,7 +450,7 @@ fn file_write_chunks() {
                 .map(move |writer| (writer, dir))
             })
             .then(
-                move |res: Result<(Writer<CoreClient>, MDataInfo), NfsError>| {
+                move |res: Result<(Writer<TestCoreClient>, MDataInfo), NfsError>| {
                     let (writer, dir) = unwrap!(res);
                     // Write 0 bytes, should succeed
                     writer

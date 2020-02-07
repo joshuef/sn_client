@@ -201,6 +201,7 @@ fn num_containers(app: &App) -> usize {
 // 4. Make sure that the app's own container is also created when it's re-authorised
 // with `app_container` set to `true` after it's been revoked.
 #[test]
+#[ignore]
 fn app_container_creation() {
     trace!("Authorising an app for the first time with `app_container` set to `true`.");
 

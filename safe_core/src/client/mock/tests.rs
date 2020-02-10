@@ -715,7 +715,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         Request::PutMData(data.into()),
         ()
     );
@@ -1321,6 +1321,8 @@ fn auth_actions_from_app() {
         perform_mutations: true,
     };
 
+    let token_signed_by_client = Some(test_generate_signed_token(client_safe_key.clone()));
+
     // Creates an App instance
     let (app_key, mut app_conn_manager, _) =
         test_register_new_app(&mut connection_manager, &client_safe_key, app_perms);
@@ -1344,7 +1346,7 @@ fn auth_actions_from_app() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        None,
+        token_signed_by_client.clone(),
         Request::PutMData(data.clone()),
         ()
     );
@@ -1353,7 +1355,7 @@ fn auth_actions_from_app() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        None,
+        token_signed_by_client.clone(),
         Request::GetMData(address),
         data
     );
@@ -1362,7 +1364,7 @@ fn auth_actions_from_app() {
     send_req_expect_failure!(
         &mut app_conn_manager,
         &app_key,
-        None,
+        token_signed_by_client.clone(),
         Request::DeleteMData(address),
         Error::AccessDenied
     );
@@ -1371,7 +1373,7 @@ fn auth_actions_from_app() {
     send_req_expect_failure!(
         &mut app_conn_manager,
         &app_key,
-        None,
+        token_signed_by_client.clone(),
         Request::ListAuthKeysAndVersion,
         Error::AccessDenied
     );
@@ -1380,7 +1382,7 @@ fn auth_actions_from_app() {
     send_req_expect_failure!(
         &mut app_conn_manager,
         &app_key,
-        None,
+        token_signed_by_client.clone(),
         Request::DelAuthKey {
             key: app_key.public_key(),
             version: 1,

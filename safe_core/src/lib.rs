@@ -38,8 +38,6 @@ pub use ffi::nfs::*;
 pub use ffi::*;
 
 // Export public core interface.
-
-#[cfg(any(test, feature = "testing"))]
 pub use self::client::test_create_balance;
 pub use self::client::{mdata_info, recoverable_apis, AuthActions, Client, ClientKeys, MDataInfo};
 #[cfg(feature = "mock-network")]

@@ -231,8 +231,6 @@ fn app_container_creation() {
         assert_eq!(num_containers(&app), 1); // should only contain app container
     }
 
-    println!("MIDDDDDDDDDDDDDDDDDDDDD");
-
     trace!("Making sure no mutations are done when re-authorising the app now.");
     let orig_balance: Coins = unwrap!(auth_run(&auth, |client| {
         client.get_balance(None).map_err(AuthError::from)

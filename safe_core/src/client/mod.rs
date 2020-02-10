@@ -1135,7 +1135,6 @@ where
 }
 
 /// Create a new mock balance at an arbitrary address.
-#[cfg(any(test, feature = "testing"))]
 pub fn test_create_balance(owner: &ClientFullId, amount: Coins) -> Result<(), CoreError> {
     trace!("Create test balance of {} for {:?}", amount, owner);
 
@@ -1199,7 +1198,6 @@ pub fn wallet_create_balance(
                 new_balance_owner,
                 amount,
                 transaction_id,
-                //token: None // TODO: pass in token here
             },
             &full_id,
         )?;

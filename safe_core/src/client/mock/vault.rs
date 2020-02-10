@@ -411,10 +411,10 @@ impl Vault {
 
             match request_type {
                 RequestType::PrivateGet | RequestType::Mutation | RequestType::Transaction => {
-                    let account = self.get_account(&requester.name());
                     // For apps, check if its public key is listed as an auth key.
                     if is_app {
-                        let auth_keys = &account
+                        let auth_keys = self
+                            .get_account(&requester.name())
                             .map(|account| (account.auth_keys().clone()))
                             .unwrap_or_else(Default::default);
 
@@ -431,8 +431,6 @@ impl Vault {
 
                     if is_app {
                         // TODO. use the checkers below to _Actually verify perms
-
-                        println!(" is app.... {:?}, {:?}", request_type, token);
 
                         // verify we have a token, if not access denied
                         let the_token = match token {

@@ -412,7 +412,6 @@ fn refresh_access_info(context: Rc<Registered>, client: &AppClient) -> Box<AppFu
         &context.access_container_info.nonce,
     ));
 
-    trace!("Refreshing access info, token found: {:?}", &client.token());
 
     client
         .get_seq_mdata_value(
@@ -425,6 +424,7 @@ fn refresh_access_info(context: Rc<Registered>, client: &AppClient) -> Box<AppFu
             let encoded = utils::symmetric_decrypt(&value.data, &context.sym_enc_key)?;
             let decoded = deserialize(&encoded)?;
 
+			trace!("Refreshing access info, decoded content found: {:?}", &decoded );
             *context.access_info.borrow_mut() = decoded;
 
             Ok(())

@@ -335,14 +335,14 @@ mod tests {
 
             assert!(the_token
                 .verify_caveat(GET_BALANCE, caveat_is_false_checker)
-                .expect("Failed caveat verification"));
+                .is_ok());
             assert!(the_token
                 .verify_caveat(PERFORM_MUTATIONS, caveat_is_false_checker)
-                .expect("Failed caveat verification"));
+                .is_ok());
 
             assert!(the_token
                 .verify_caveat(TRANSFER_COINS, caveat_is_false_checker)
-                .expect("Failed caveat verification"));
+                .is_ok());
 
             Ok(())
         }));

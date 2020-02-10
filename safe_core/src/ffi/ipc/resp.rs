@@ -14,6 +14,7 @@ use crate::ffi::MDataInfo;
 use ffi_utils::vec_from_raw_parts;
 use safe_nd::AuthToken;
 
+use crate::core_structs::FfiAuthTokens;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::ptr;
@@ -78,6 +79,8 @@ impl Drop for ContainerInfo {
 /// Access container entry for a single app.
 #[repr(C)]
 pub struct AccessContainerEntry {
+    /// Pointer to AuthToken
+    pub auth_token: FfiAuthTokens,
     /// Pointer to the array of `ContainerInfo`.
     pub containers: *const ContainerInfo,
     /// Size of the array.

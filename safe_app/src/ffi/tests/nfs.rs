@@ -47,7 +47,7 @@ fn setup() -> (App, MDataInfo) {
 
     let container_info = unwrap!(run(&app, move |client, context| {
         context.get_access_info(client).then(move |res| {
-            let mut access_info = unwrap!(res);
+            let mut access_info = unwrap!(res).1;
             Ok(unwrap!(access_info.remove("_videos")).0)
         })
     }));

@@ -62,7 +62,7 @@ pub unsafe extern "C" fn access_container_fetch(
         (*app).send(move |client, context| {
             context
                 .get_access_info(client)
-                .and_then(move |containers| {
+                .and_then(move |(_, containers)| {
                     let ffi_containers = containers_into_vec(
                         containers.into_iter().map(|(key, (_, value))| (key, value)),
                     )?;
@@ -103,7 +103,7 @@ pub unsafe extern "C" fn access_container_get_container_mdata_info(
         (*app).send(move |client, context| {
             context
                 .get_access_info(client)
-                .map(move |mut containers| {
+                .map(move |(_, mut containers)| {
                     if let Some((mdata_info, _)) = containers.remove(&name) {
                         let mdata_info = mdata_info.into_repr_c();
                         o_cb(user_data.0, FFI_RESULT_OK, &mdata_info);
@@ -157,7 +157,10 @@ mod tests {
 
         unwrap!(run(&app, move |_client, context| {
             let reg = Rc::clone(unwrap!(context.as_registered()));
-            assert!(reg.access_info.borrow().is_empty());
+            let token = &reg.access_info.borrow().0;
+            let containers = &reg.access_info.borrow().1;
+            assert!(containers.is_empty());
+            assert_eq!(0, token.caveats.len());
             Ok(())
         }));
 
@@ -169,13 +172,15 @@ mod tests {
 
         unwrap!(run(&app, move |_client, context| {
             let reg = Rc::clone(unwrap!(context.as_registered()));
-            assert!(!reg.access_info.borrow().is_empty());
+            let token = &reg.access_info.borrow().0;
+            let containers = &reg.access_info.borrow().1;
 
-            let access_info = reg.access_info.borrow();
+            assert!(!containers.is_empty());
             assert_eq!(
-                unwrap!(access_info.get("_videos")).1,
+                unwrap!(containers.get("_videos")).1,
                 *unwrap!(container_permissions.get("_videos"))
             );
+            assert_eq!(3, token.caveats.len());
 
             Ok(())
         }));

@@ -410,10 +410,10 @@ pub fn compare_access_container_entries(
             // Check the requested permissions in the access container.
             let expected_perm_set = container_perms_into_permission_set(&expected_perms);
             let (md_info, perms) = unwrap!(
-                access_container.remove(&container),
+                access_container.1.remove(&container),
                 "No '{}' in access container {:?}",
                 container,
-                access_container
+                access_container.1
             );
             assert_eq!(perms, expected_perms);
 

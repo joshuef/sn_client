@@ -69,14 +69,17 @@ fn verify_app_is_revoked(
             Ok(app_key)
         })
         .and_then(move |app_key| {
-            let futures = prev_ac_entry.into_iter().map(move |(_, (mdata_info, _))| {
-                // Verify the app has no permissions in the containers.
-                c1.list_mdata_user_permissions(*mdata_info.address(), app_key)
-                    .then(|res| {
-                        assert_match!(res, Err(CoreError::DataError(SndError::NoSuchKey)));
-                        Ok(())
-                    })
-            });
+            let futures = prev_ac_entry
+                .1
+                .into_iter()
+                .map(move |(_, (mdata_info, _))| {
+                    // Verify the app has no permissions in the containers.
+                    c1.list_mdata_user_permissions(*mdata_info.address(), app_key)
+                        .then(|res| {
+                            assert_match!(res, Err(CoreError::DataError(SndError::NoSuchKey)));
+                            Ok(())
+                        })
+                });
 
             future::join_all(futures).map(|_| ())
         })
@@ -116,6 +119,7 @@ fn verify_app_is_authenticated(client: &AuthClient, app_id: String) -> Box<AuthF
             let ac_entry = unwrap!(ac_entry);
 
             let futures = ac_entry
+                .1
                 .into_iter()
                 .map(move |(_, (mdata_info, permissions))| {
                     // Verify the app has the permissions set according to the access container.
@@ -206,8 +210,8 @@ mod mock_routing {
 
         // Put several files with a known content in both containers
         let mut ac_entries = access_container(&auth, app_id.clone(), auth_granted.clone());
-        let (videos_md, _) = unwrap!(ac_entries.remove("_videos"));
-        let (docs_md, _) = unwrap!(ac_entries.remove("_documents"));
+        let (videos_md, _) = unwrap!(ac_entries.1.remove("_videos"));
+        let (docs_md, _) = unwrap!(ac_entries.1.remove("_documents"));
 
         unwrap!(create_file(
             &auth,
@@ -667,7 +671,7 @@ fn app_revocation_and_reauth() {
 
     // Put one file by each app into a shared container.
     let mut ac_entries = access_container(&authenticator, app_id1.clone(), auth_granted1.clone());
-    let (videos_md1, _) = unwrap!(ac_entries.remove("_videos"));
+    let (videos_md1, _) = unwrap!(ac_entries.1.remove("_videos"));
     unwrap!(create_file(
         &authenticator,
         videos_md1.clone(),
@@ -677,7 +681,7 @@ fn app_revocation_and_reauth() {
     ));
 
     let mut ac_entries = access_container(&authenticator, app_id2.clone(), auth_granted2.clone());
-    let (videos_md2, _) = unwrap!(ac_entries.remove("_videos"));
+    let (videos_md2, _) = unwrap!(ac_entries.1.remove("_videos"));
     unwrap!(create_file(
         &authenticator,
         videos_md2.clone(),
@@ -687,7 +691,7 @@ fn app_revocation_and_reauth() {
     ));
 
     let app_container_name = app_container_name(&app_id2);
-    let (app_container_md, _) = unwrap!(ac_entries.remove(&app_container_name));
+    let (app_container_md, _) = unwrap!(ac_entries.1.remove(&app_container_name));
     unwrap!(create_file(
         &authenticator,
         app_container_md,
@@ -737,7 +741,7 @@ fn app_revocation_and_reauth() {
 
     // The second app can still access both files after re-fetching the access container.
     let mut ac_entries = access_container(&authenticator, app_id2.clone(), auth_granted2.clone());
-    let (videos_md2, _) = unwrap!(ac_entries.remove("_videos"));
+    let (videos_md2, _) = unwrap!(ac_entries.1.remove("_videos"));
 
     let _ = unwrap!(fetch_file(&authenticator, videos_md2.clone(), "1.mp4"));
     let _ = unwrap!(fetch_file(&authenticator, videos_md2.clone(), "2.mp4"));
@@ -745,7 +749,7 @@ fn app_revocation_and_reauth() {
     // Re-authorise the first app.
     let auth_granted1 = unwrap!(register_app(&authenticator, &auth_req1));
     let mut ac_entries = access_container(&authenticator, app_id1.clone(), auth_granted1);
-    let (videos_md1, _) = unwrap!(ac_entries.remove("_videos"));
+    let (videos_md1, _) = unwrap!(ac_entries.1.remove("_videos"));
 
     // The first app can access the files again.
     let _ = unwrap!(fetch_file(&authenticator, videos_md1.clone(), "1.mp4"));
@@ -771,7 +775,7 @@ fn app_revocation_and_reauth() {
     }));
 
     let mut ac_entries = access_container(&authenticator, app_id2.clone(), auth_granted2);
-    let (videos_md2, _) = unwrap!(ac_entries.remove("_videos"));
+    let (videos_md2, _) = unwrap!(ac_entries.1.remove("_videos"));
     let _ = unwrap!(fetch_file(&authenticator, videos_md2.clone(), "1.mp4"));
     let _ = unwrap!(fetch_file(&authenticator, videos_md2, "2.mp4"));
 
@@ -793,7 +797,7 @@ fn app_revocation_and_reauth() {
 
     // The second app should be able to access data from its own container,
     let mut ac_entries = access_container(&authenticator, app_id2.clone(), auth_granted2);
-    let (app_container_md, _) = unwrap!(ac_entries.remove(&app_container_name));
+    let (app_container_md, _) = unwrap!(ac_entries.1.remove(&app_container_name));
 
     assert_eq!(
         count_mdata_entries(&authenticator, app_container_md.clone()),
@@ -863,7 +867,7 @@ fn revocation_symmetric_decipher_failure() {
 
     // Put a file into the _downloads container.
     let mut ac_entries = access_container(&authenticator, app_id2.clone(), auth_granted2);
-    let (downloads_md, _) = unwrap!(ac_entries.remove("_downloads"));
+    let (downloads_md, _) = unwrap!(ac_entries.1.remove("_downloads"));
 
     unwrap!(create_file(
         &authenticator,

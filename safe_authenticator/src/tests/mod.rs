@@ -346,9 +346,9 @@ mod mock_routing {
         // contains info about all of the requested containers.
         let mut ac_entries =
             test_utils::access_container(&auth, app_id.clone(), auth_granted.clone());
-        let (_videos_md, _) = unwrap!(ac_entries.remove("_videos"));
-        let (_documents_md, _) = unwrap!(ac_entries.remove("_documents"));
-        let (app_container, _) = unwrap!(ac_entries.remove(&app_container_name(&app_id)));
+        let (_videos_md, _) = unwrap!(ac_entries.1.remove("_videos"));
+        let (_documents_md, _) = unwrap!(ac_entries.1.remove("_documents"));
+        let (app_container, _) = unwrap!(ac_entries.1.remove(&app_container_name(&app_id)));
 
         let app_pk = auth_granted.app_keys.public_key();
 
@@ -527,13 +527,13 @@ fn app_authentication() {
         ],
     );
     for (container, permissions) in expected.clone() {
-        let perms = unwrap!(auth_granted.access_container_entry.get(&container));
+        let perms = unwrap!(auth_granted.access_container_entry.1.get(&container));
         assert_eq!((*perms).1, permissions);
     }
 
     let mut access_container =
         test_utils::access_container(&authenticator, app_id.clone(), auth_granted.clone());
-    assert_eq!(access_container.len(), 3);
+    assert_eq!(access_container.1.len(), 3);
 
     let app_keys = auth_granted.app_keys;
     let app_pk = app_keys.public_key();
@@ -550,13 +550,13 @@ fn app_authentication() {
 
     assert!(token
         .verify_caveat(GET_BALANCE, perm_is_false_checker)
-        .expect("Failed to verify balance caveat."));
+        .is_ok());
     assert!(token
         .verify_caveat(PERFORM_MUTATIONS, perm_is_false_checker)
-        .expect("Failed to verify mut caveat."));
+        .is_ok());
     assert!(token
         .verify_caveat(TRANSFER_COINS, perm_is_false_checker)
-        .expect("Failed to verify transfer caveat."));
+        .is_ok());
 
     test_utils::compare_access_container_entries(
         &authenticator,
@@ -565,7 +565,7 @@ fn app_authentication() {
         expected,
     );
 
-    let (app_dir_info, _) = unwrap!(access_container.remove(&app_container_name(&app_id)));
+    let (app_dir_info, _) = unwrap!(access_container.1.remove(&app_container_name(&app_id)));
 
     // Check the app info is present in the config file.
     let apps = unwrap!(run(&authenticator, |client| {

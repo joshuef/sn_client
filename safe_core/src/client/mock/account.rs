@@ -7,12 +7,11 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::config_handler::Config;
-use safe_nd::{AppPermissions, Coins, Error, PublicKey};
+use safe_nd::{Coins, Error, PublicKey};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 
 pub const DEFAULT_MAX_CREDITS: usize = 100;
-// pub const DEFAULT_COINS: &str = "100";
 
 #[derive(Deserialize, Serialize)]
 pub struct CoinBalance {
@@ -73,7 +72,7 @@ pub struct Credit {
 
 #[derive(Deserialize, Serialize)]
 pub struct Account {
-    auth_keys: BTreeMap<PublicKey, AppPermissions>,
+    auth_tokens: BTreeMap<PublicKey, [u8; 32]>,
     version: u64,
     config: Config,
 }
@@ -81,7 +80,7 @@ pub struct Account {
 impl Account {
     pub fn new(config: Config) -> Self {
         Account {
-            auth_keys: Default::default(),
+            auth_tokens: Default::default(),
             version: 0,
             config,
         }
@@ -96,12 +95,12 @@ impl Account {
     pub fn ins_auth_key(
         &mut self,
         key: PublicKey,
-        permissions: AppPermissions,
+        permissions: &[u8; 32],
         version: u64,
     ) -> Result<(), Error> {
         self.validate_version(version)?;
 
-        let _ = self.auth_keys.insert(key, permissions);
+        let _ = self.auth_tokens.insert(key, *permissions);
         self.version = version;
         Ok(())
     }
@@ -111,7 +110,7 @@ impl Account {
     pub fn del_auth_key(&mut self, key: &PublicKey, version: u64) -> Result<(), Error> {
         self.validate_version(version)?;
 
-        if self.auth_keys.remove(key).is_some() {
+        if self.auth_tokens.remove(key).is_some() {
             self.version = version;
             Ok(())
         } else {
@@ -119,8 +118,8 @@ impl Account {
         }
     }
 
-    pub fn auth_keys(&self) -> &BTreeMap<PublicKey, AppPermissions> {
-        &self.auth_keys
+    pub fn auth_keys(&self) -> &BTreeMap<PublicKey, [u8; 32]> {
+        &self.auth_tokens
     }
 
     fn validate_version(&self, version: u64) -> Result<(), Error> {

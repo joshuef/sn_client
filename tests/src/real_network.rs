@@ -167,7 +167,7 @@ fn write_data() {
     println!("File name: {}", file_name);
 
     unsafe {
-        let mut ac_entries = access_container(&*auth_h, app_id, auth_granted);
+        let mut ac_entries = access_container(&*auth_h, app_id, auth_granted).1;
         let (videos_md, _) = unwrap!(ac_entries.remove("_videos"));
 
         match fetch_file(&*auth_h, videos_md.clone(), file_name) {
@@ -236,7 +236,7 @@ fn read_data() {
     assert!(any);
 
     let videos_md = unsafe {
-        let mut ac_entries = access_container(&*auth_h, app_id, auth_granted);
+        let mut ac_entries = access_container(&*auth_h, app_id, auth_granted).1;
         let (videos_md, _) = unwrap!(ac_entries.remove("_videos"));
         videos_md
     };
@@ -522,7 +522,7 @@ fn authorisation_and_revocation() {
     println!("File name: {}", file_name.clone());
 
     let videos_md = unsafe {
-        let mut ac_entries = access_container(&*auth_h, app_id.clone(), auth_granted.clone());
+        let mut ac_entries = access_container(&*auth_h, app_id.clone(), auth_granted.clone()).1;
         let (videos_md, _) = unwrap!(ac_entries.remove("_videos"));
         unwrap!(create_file(
             &*auth_h,
@@ -595,7 +595,7 @@ fn authorisation_and_revocation() {
 
     // The app can access the file again.
     unsafe {
-        let mut ac_entries = access_container(&*auth_h, app_id, auth_granted);
+        let mut ac_entries = access_container(&*auth_h, app_id, auth_granted).1;
         let (videos_md, _) = unwrap!(ac_entries.remove("_videos"));
         let _ = unwrap!(fetch_file(&*auth_h, videos_md, file_name));
     };

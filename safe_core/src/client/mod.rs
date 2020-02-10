@@ -45,9 +45,9 @@ use lru_cache::LruCache;
 use safe_nd::{
     AData, ADataAddress, ADataAppendOperation, ADataEntries, ADataEntry, ADataIndex, ADataIndices,
     ADataOwner, ADataPermissions, ADataPubPermissionSet, ADataPubPermissions,
-    ADataUnpubPermissionSet, ADataUnpubPermissions, ADataUser, AppPermissions, AuthToken,
-    ClientFullId, Coins, IData, IDataAddress, LoginPacket, MData, MDataAddress, MDataEntries,
-    MDataEntryActions, MDataPermissionSet, MDataSeqEntries, MDataSeqEntryActions, MDataSeqValue,
+    ADataUnpubPermissionSet, ADataUnpubPermissions, ADataUser, AuthToken, ClientFullId, Coins,
+    IData, IDataAddress, LoginPacket, MData, MDataAddress, MDataEntries, MDataEntryActions,
+    MDataPermissionSet, MDataSeqEntries, MDataSeqEntryActions, MDataSeqValue,
     MDataUnseqEntryActions, MDataValue, MDataValues, Message, MessageId, PublicId, PublicKey,
     Request, RequestType, Response, SeqMutableData, Transaction, UnseqMutableData, XorName,
 };
@@ -1241,9 +1241,8 @@ pub fn wallet_transfer_coins(
 /// this trait.
 pub trait AuthActions: Client + Clone + 'static {
     /// Fetches a list of authorised keys and version.
-    fn list_auth_keys_and_version(
-        &self,
-    ) -> Box<CoreFuture<(BTreeMap<PublicKey, AppPermissions>, u64)>> {
+    #[allow(clippy::type_complexity)]
+    fn list_auth_keys_and_version(&self) -> Box<CoreFuture<(BTreeMap<PublicKey, [u8; 32]>, u64)>> {
         trace!("ListAuthKeysAndVersion");
 
         send(self, Request::ListAuthKeysAndVersion)
@@ -1255,19 +1254,14 @@ pub trait AuthActions: Client + Clone + 'static {
     }
 
     /// Adds a new authorised key.
-    fn ins_auth_key(
-        &self,
-        key: PublicKey,
-        permissions: AppPermissions,
-        version: u64,
-    ) -> Box<CoreFuture<()>> {
+    fn ins_auth_key(&self, key: PublicKey, token: AuthToken, version: u64) -> Box<CoreFuture<()>> {
         trace!("InsAuthKey ({:?})", key);
 
         send_mutation(
             self,
             Request::InsAuthKey {
                 key,
-                permissions,
+                token,
                 version,
             },
         )

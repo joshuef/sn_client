@@ -185,10 +185,10 @@ fn verify_access_container_entry(
     actual_entry: &AccessContainerEntry,
     requested_containers: &HashMap<String, ContainerPermissions>,
 ) {
-    assert_eq!(actual_entry.len(), requested_containers.len());
+    assert_eq!(actual_entry.1.len(), requested_containers.len());
 
     for (name, expected_perms) in requested_containers {
-        let &(_, ref actual_perms) = unwrap!(actual_entry.get(name));
+        let &(_, ref actual_perms) = unwrap!(actual_entry.1.get(name));
         assert_eq!(actual_perms, expected_perms);
     }
 }

@@ -28,13 +28,14 @@ use safe_core::ipc::req::{
 };
 use safe_core::ipc::resp::IpcResp;
 use safe_core::ipc::{decode_msg, IpcMsg};
-use safe_nd::IpcError;
+use safe_nd::{AuthToken, IpcError};
 
 use safe_core::{client, CoreError, FutureExt};
 use safe_core::{fry, ok};
 use safe_nd::MDataAddress;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
+use unwrap::unwrap;
 
 /// Decodes a given encoded IPC message without requiring an authorised account.
 #[no_mangle]
@@ -375,14 +376,15 @@ pub unsafe extern "C" fn encode_containers_resp(
 
                         access_container::fetch_entry(&c3, &app_id, app_keys.clone()).then(
                             move |res| {
+                                let mut token = unwrap!(AuthToken::new());
                                 let version = match res {
                                     // Updating an existing entry
                                     Ok((version, Some(mut existing_perms))) => {
                                         for (key, val) in perms {
-                                            let _ = existing_perms.insert(key, val);
+                                            let _ = existing_perms.1.insert(key, val);
                                         }
-                                        perms = existing_perms;
-
+                                        perms = existing_perms.1;
+                                        token = existing_perms.0;
                                         version + 1
                                     }
 
@@ -393,7 +395,7 @@ pub unsafe extern "C" fn encode_containers_resp(
                                     // existing entry
                                     Err(e) => return Err(e),
                                 };
-                                Ok((version, app_id, app_keys, perms))
+                                Ok((version, app_id, app_keys, (token, perms)))
                             },
                         )
                     })

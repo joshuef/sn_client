@@ -272,7 +272,7 @@ fn app_authentication() {
         ],
     );
     for (container, permissions) in expected.clone() {
-        let perms = unwrap!(auth_granted.access_container_entry.get(&container));
+        let perms = unwrap!(auth_granted.access_container_entry.1.get(&container));
         assert_eq!((*perms).1, permissions);
     }
 }

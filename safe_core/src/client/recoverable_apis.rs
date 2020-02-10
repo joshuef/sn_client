@@ -14,7 +14,7 @@ use crate::utils::FutureExt;
 use futures::future::{self, Either, Loop};
 use futures::Future;
 use safe_nd::{
-    AppPermissions, EntryError, Error as SndError, MDataAction, MDataAddress, MDataPermissionSet,
+    AuthToken, EntryError, Error as SndError, MDataAction, MDataAddress, MDataPermissionSet,
     MDataSeqEntries, MDataSeqEntryAction, MDataSeqEntryActions, MDataSeqValue, PublicKey,
     SeqMutableData,
 };
@@ -303,7 +303,7 @@ fn union_permission_sets(a: MDataPermissionSet, b: MDataPermissionSet) -> MDataP
 pub fn ins_auth_key_to_client_h(
     client: &(impl Client + AuthActions),
     key: PublicKey,
-    permissions: AppPermissions,
+    permissions: AuthToken,
     version: u64,
 ) -> Box<CoreFuture<()>> {
     let state = (0, version);
@@ -311,7 +311,7 @@ pub fn ins_auth_key_to_client_h(
 
     future::loop_fn(state, move |(attempts, version)| {
         client
-            .ins_auth_key(key, permissions, version)
+            .ins_auth_key(key, permissions.clone(), version)
             .map(|_| Loop::Break(()))
             .or_else(move |error| match error {
                 CoreError::DataError(SndError::InvalidSuccessor(current_version)) => {

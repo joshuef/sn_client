@@ -14,18 +14,20 @@ use crate::access_container::update_container_perms;
 use crate::app_container;
 use crate::client::AuthClient;
 use crate::config::{self, AppInfo, Apps};
-use futures::future::{self, Either};
+use futures::future::Either;
 use futures::Future;
 use log::trace;
 use safe_core::client;
-use safe_core::core_structs::{AccessContInfo, AccessContainerEntry, AppKeys};
+use safe_core::core_structs::{
+    default_access_container_entry, AccessContInfo, AccessContainerEntry, AppKeys,
+};
 use safe_core::ipc::req::{AuthReq, ContainerPermissions, Permission};
 use safe_core::ipc::resp::AuthGranted;
 use safe_core::{
     app_container_name, client::AuthActions, recoverable_apis, Client, FutureExt, MDataInfo,
 };
 use safe_core::{btree_set, err, fry, ok};
-use safe_nd::{AppPermissions, AuthToken, GET_BALANCE, PERFORM_MUTATIONS, TRANSFER_COINS};
+use safe_nd::{AuthToken, GET_BALANCE, PERFORM_MUTATIONS, TRANSFER_COINS};
 use std::collections::HashMap;
 use tiny_keccak::sha3_256;
 use unwrap::unwrap;
@@ -71,7 +73,8 @@ pub fn app_state(client: &AuthClient, apps: &Apps, app_id: &str) -> Box<AuthFutu
 /// Check whether `permissions` has an app container entry for `app_id` and that all permissions are
 /// set.
 fn app_container_exists(permissions: &AccessContainerEntry, app_id: &str) -> bool {
-    match permissions.get(&app_container_name(app_id)) {
+    let container = &permissions.1;
+    match container.get(&app_container_name(app_id)) {
         Some(&(_, ref access)) => {
             *access
                 == btree_set![
@@ -99,7 +102,9 @@ fn insert_app_container(
         Permission::Delete,
         Permission::ManagePermissions,
     ];
-    let _ = app_entry.insert(app_container_name(app_id), (app_container_info, access));
+    let _ = app_entry
+        .1
+        .insert(app_container_name(app_id), (app_container_info, access));
     app_entry
 }
 
@@ -151,6 +156,8 @@ pub fn authenticate(client: &AuthClient, auth_req: AuthReq) -> Box<AuthFuture<Au
     let c2 = client.clone();
     let c3 = client.clone();
     let c4 = client.clone();
+    let client_safe_key = client.full_id();
+    let mut token: AuthToken = fry!(AuthToken::new());
 
     config::list_apps(client)
         .join(check_revocation(client, app_id.clone()))
@@ -159,6 +166,25 @@ pub fn authenticate(client: &AuthClient, auth_req: AuthReq) -> Box<AuthFuture<Au
                 .map(move |app_state| (apps_version, apps, app_state, app_id))
         })
         .and_then(move |(apps_version, mut apps, app_state, app_id)| {
+            let transfer_coins_caveat = (
+                TRANSFER_COINS.to_string(),
+                format!("{}", app_permissions.transfer_coins),
+            );
+            let mutate_caveat = (
+                PERFORM_MUTATIONS.to_string(),
+                format!("{}", app_permissions.perform_mutations),
+            );
+            let balance_caveat = (
+                GET_BALANCE.to_string(),
+                format!("{}", app_permissions.get_balance),
+            );
+
+            fry!(token.add_caveat(transfer_coins_caveat, &client_safe_key));
+
+            fry!(token.add_caveat(mutate_caveat, &client_safe_key));
+
+            fry!(token.add_caveat(balance_caveat, &client_safe_key));
+
             // Determine an app state. If it's revoked we can reuse existing
             // keys stored in the config. And if it is authorised, we just
             // return the app info from the config.
@@ -171,15 +197,16 @@ pub fn authenticate(client: &AuthClient, auth_req: AuthReq) -> Box<AuthFuture<Au
                         info: auth_req.app,
                         keys,
                         perms: auth_req.app_permissions,
+                        token: token.clone(),
                     };
                     config::insert_app(&c3, apps, config::next_version(apps_version), app.clone())
-                        .map(move |_| (app, app_state, app_id))
+                        .map(move |_| (app, app_state, app_id, token))
                         .into_box()
                 }
                 AppState::Authenticated | AppState::Revoked => {
                     let app_entry_name = sha3_256(app_id.as_bytes());
                     if let Some(app) = apps.remove(&app_entry_name) {
-                        ok!((app, app_state, app_id))
+                        ok!((app, app_state, app_id, token))
                     } else {
                         err!(AuthError::from(
                             "Logical error - couldn't find a revoked app in config"
@@ -188,23 +215,16 @@ pub fn authenticate(client: &AuthClient, auth_req: AuthReq) -> Box<AuthFuture<Au
                 }
             }
         })
-        .and_then(move |(app, app_state, app_id)| {
+        .and_then(move |(app, app_state, app_id, token)| {
             match app_state {
                 AppState::Authenticated => {
-                    // Return info of the already registered app
-                    // TODO: What do we do when a token is already issued for an app?
-                    // Probably generate _another_ token...?
-                    authenticated_app(&c4, app, app_id, app_container, app_permissions)
+                    // Re-authenticate an app and update tokens if required.
+                    authenticated_app(&c4, app, app_id, app_container, token)
                 }
                 AppState::NotAuthenticated | AppState::Revoked => {
-                    // Register a new app or restore a previously registered app
-                    authenticate_new_app(
-                        &c4,
-                        app,
-                        app_container,
-                        app_permissions,
-                        container_permissions,
-                    )
+                    // Authenticate a new app or restore a previously authenticated app from the
+                    // Authenticator config
+                    authenticate_new_app(&c4, app, app_container, token, container_permissions)
                 }
             }
         })
@@ -218,51 +238,77 @@ fn authenticated_app(
     app: AppInfo,
     app_id: String,
     app_container: bool,
-    _app_permissions: AppPermissions,
+    token: AuthToken,
 ) -> Box<AuthFuture<AuthGranted>> {
     let c2 = client.clone();
     let c3 = client.clone();
+    let c4 = client.clone();
+    let c5 = client.clone();
+    let c6 = client.clone();
+    let c7 = client.clone();
 
     let app_keys = app.keys.clone();
     let app_pk = app.keys.public_key();
     let bootstrap_config = fry!(client::bootstrap_config());
 
-    // TODO: Here, we should regenerate a token based upon reqs...
     access_container::fetch_entry(client, &app_id, app_keys.clone())
         .and_then(move |(_version, perms)| {
-            let perms = perms.unwrap_or_else(AccessContainerEntry::default);
-
-            // TODO: check if we need to update app permissions
-
+            config::get_app(&c2, &app_id)
+                .and_then(move |info| config::list_apps(&c2).map(move |apps| (apps, info)))
+                .map(move |(apps, info)| (_version, perms, apps, info.token, info.info.id))
+        })
+        .and_then(move |(_version, perms, apps, old_token, app_id)| {
+            let mut permissions = perms.unwrap_or_else(default_access_container_entry);
+            // Check caveats if we need to update app permissions
+            if old_token.caveats != token.caveats {
+                permissions.0 = token;
+            }
             // Check whether we need to create/update dedicated container
-            if app_container && !app_container_exists(&perms, &app_id) {
-                let future = app_container::fetch_or_create(&c2, &app_id, app_pk).and_then(
+            if app_container && !app_container_exists(&permissions, &app_id) {
+                let future = app_container::fetch_or_create(&c3, &app_id, app_pk).and_then(
                     move |mdata_info| {
-                        let perms = insert_app_container(perms, &app_id, mdata_info);
-                        update_access_container(&c2, &app, perms.clone()).map(move |_| perms)
+                        let permissions = insert_app_container(permissions, &app_id, mdata_info);
+                        Ok((permissions, apps, app))
                     },
                 );
                 Either::A(future)
             } else {
-                Either::B(future::ok(perms))
+                Either::B(futures::future::ok((permissions, apps, app)))
             }
         })
-        .and_then(move |perms| {
-            let access_container_info = c3.access_container();
+        .and_then(move |(permissions, apps, app)| {
+            update_access_container(&c4, &app, permissions.clone())
+                .and_then(move |_| {
+                    config::insert_app(&c5, apps.1, config::next_version(apps.0), app)
+                })
+                .and_then(move |_| {
+                    c4.list_auth_keys_and_version()
+                        .map_err(AuthError::from)
+                        .and_then(move |(_, version)| {
+                            recoverable_apis::ins_auth_key_to_client_h(
+                                &c6,
+                                app_pk,
+                                permissions.0.clone(),
+                                version + 1,
+                            )
+                            .map(move |_| permissions)
+                            .map_err(AuthError::from)
+                        })
+                })
+        })
+        .and_then(move |access_container_entry| {
+            let access_container_info = c7.access_container();
             let access_container_info = AccessContInfo::from_mdata_info(&access_container_info)?;
-
+            let token = access_container_entry.0.clone();
             // TODO: Add caveats as makes sense...
             // (where to get them from ? )
-            let token = AuthToken::new().expect("Problems creating new token");
-
-            trace!("Token retrieved from existing app, {:?}", token);
 
             Ok(AuthGranted {
                 token,
                 app_keys,
                 bootstrap_config,
                 access_container_info,
-                access_container_entry: perms,
+                access_container_entry,
             })
         })
         .into_box()
@@ -280,8 +326,7 @@ fn authenticate_new_app(
     client: &AuthClient,
     app: AppInfo,
     app_container: bool,
-    app_permissions: AppPermissions,
-    // TODO: Convert permission string into parseable caveats.
+    token: AuthToken,
     // TODO: Remove ContainerPermissions
     // TODO: Add label permissions.
     permissions: HashMap<String, ContainerPermissions>,
@@ -296,32 +341,6 @@ fn authenticate_new_app(
     let app_keys = app.keys.clone();
     let app_keys_auth = app.keys.clone();
     let app_id = app.info.id.clone();
-    let client_safe_key = client.full_id();
-
-    let mut token = AuthToken::new().expect("Error creating new token.");
-
-    let transfer_coins_caveat = (
-        TRANSFER_COINS.to_string(),
-        format!("{}", app_permissions.transfer_coins),
-    );
-    let mutate_caveat = (
-        PERFORM_MUTATIONS.to_string(),
-        format!("{}", app_permissions.perform_mutations),
-    );
-    let balance_caveat = (
-        GET_BALANCE.to_string(),
-        format!("{}", app_permissions.get_balance),
-    );
-
-    token
-        .add_caveat(transfer_coins_caveat, &client_safe_key)
-        .expect("Failed to add transfer caveat to token.");
-    token
-        .add_caveat(mutate_caveat, &client_safe_key)
-        .expect("Failed to add mutate caveat to token.");
-    token
-        .add_caveat(balance_caveat, &client_safe_key)
-        .expect("Failed to add get_balance caveat to token.");
 
     client
         .list_auth_keys_and_version()
@@ -329,30 +348,31 @@ fn authenticate_new_app(
             recoverable_apis::ins_auth_key_to_client_h(
                 &c2,
                 app_keys.public_key(),
-                app_permissions,
+                token.clone(),
                 version + 1,
             )
+            .map(move |_| token)
         })
         .map_err(AuthError::from)
-        .and_then(move |_| {
+        .and_then(move |token| {
             if permissions.is_empty() {
-                ok!((Default::default(), app_pk))
+                ok!((Default::default(), app_pk, token))
             } else {
                 update_container_perms(&c3, permissions, app_pk)
-                    .map(move |perms| (perms, app_pk))
+                    .map(move |perms| (perms, app_pk, token))
                     .into_box()
             }
         })
-        .and_then(move |(perms, app_pk)| {
+        .and_then(move |(perms, app_pk, token)| {
             if app_container {
                 app_container::fetch_or_create(&c4, &app_id, app_pk)
                     .and_then(move |mdata_info| {
-                        ok!(insert_app_container(perms, &app_id, mdata_info))
+                        ok!(insert_app_container((token, perms), &app_id, mdata_info))
                     })
                     .map(move |perms| (perms, app))
                     .into_box()
             } else {
-                ok!((perms, app))
+                ok!(((token, perms), app))
             }
         })
         .and_then(move |(perms, app)| {
@@ -363,7 +383,7 @@ fn authenticate_new_app(
             let access_container_info = AccessContInfo::from_mdata_info(&access_container_info)?;
 
             Ok(AuthGranted {
-                token,
+                token: access_container_entry.0.clone(),
                 app_keys: app_keys_auth,
                 bootstrap_config: client::bootstrap_config()?,
                 access_container_info,

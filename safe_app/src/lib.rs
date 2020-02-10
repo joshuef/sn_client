@@ -91,7 +91,9 @@ use futures::sync::mpsc as futures_mpsc;
 use futures::{future, Future, IntoFuture};
 
 use log::info;
-use safe_core::core_structs::{access_container_enc_key, AccessContInfo, AccessContainerEntry};
+use safe_core::core_structs::{
+    access_container_enc_key, default_access_container_entry, AccessContInfo, AccessContainerEntry,
+};
 use safe_core::crypto::shared_secretbox;
 use safe_core::ipc::{AuthGranted, BootstrapConfig};
 
@@ -99,7 +101,6 @@ use safe_core::ipc::{AuthGranted, BootstrapConfig};
 use safe_core::ConnectionManager;
 use safe_core::{event_loop, fry, CoreMsg, CoreMsgTx, NetworkEvent, NetworkTx};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::sync::Mutex;
@@ -340,7 +341,7 @@ impl AppContext {
             app_id,
             sym_enc_key,
             access_container_info,
-            access_info: RefCell::new(HashMap::new()),
+            access_info: RefCell::new(default_access_container_entry()),
         }))
     }
 
@@ -435,7 +436,8 @@ fn refresh_access_info(context: Rc<Registered>, client: &AppClient) -> Box<AppFu
 }
 
 fn fetch_access_info(context: Rc<Registered>, client: &AppClient) -> Box<AppFuture<()>> {
-    if context.access_info.borrow().is_empty() {
+    let container = context.access_info.borrow().1.clone();
+    if container.is_empty() {
         refresh_access_info(context, client)
     } else {
         future::ok(()).into_box()

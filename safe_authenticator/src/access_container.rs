@@ -35,7 +35,7 @@ pub fn update_container_perms(
     client: &AuthClient,
     permissions: HashMap<String, ContainerPermissions>,
     app_pk: PublicKey,
-) -> Box<AuthFuture<AccessContainerEntry>> {
+) -> Box<AuthFuture<HashMap<String, (MDataInfo, ContainerPermissions)>>> {
     let c2 = client.clone();
 
     fetch_authenticator_entry(client)

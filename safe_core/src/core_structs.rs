@@ -13,7 +13,7 @@
 use crate::client::MDataInfo;
 use crate::crypto::{shared_box, shared_secretbox};
 use crate::ffi::ipc::resp as ffi;
-use safe_nd::SafeKey;
+use safe_nd::{AuthToken, Caveat, SafeKey};
 
 // TODO, move these here...
 use crate::ipc::req::{
@@ -25,7 +25,9 @@ pub use crate::ipc::req::{container_perms_into_permission_set, ContainerPermissi
 use crate::utils::{symmetric_encrypt, SymEncKey, SymEncNonce, SYM_ENC_NONCE_LEN};
 use crate::CoreError;
 use bincode::{deserialize, serialize};
-use ffi_utils::{vec_clone_from_raw_parts, vec_into_raw_parts, ReprC, StringError};
+use ffi_utils::{
+    vec_clone_from_raw_parts, vec_from_raw_parts, vec_into_raw_parts, ReprC, StringError,
+};
 use rand::thread_rng;
 use safe_nd::IpcError;
 use safe_nd::{
@@ -39,6 +41,7 @@ use std::ptr;
 use std::slice;
 use tiny_keccak::sha3_256;
 use unwrap::unwrap;
+
 /// Entry key under which the metadata are stored.
 #[no_mangle]
 pub static METADATA_KEY: &[u8] = b"_metadata";
@@ -131,15 +134,23 @@ impl ReprC for AppKeys {
 }
 
 /// Represents an entry for a single app in the access container
-pub type AccessContainerEntry = HashMap<String, (MDataInfo, ContainerPermissions)>;
+pub type AccessContainerEntry = (
+    AuthToken,
+    HashMap<String, (MDataInfo, ContainerPermissions)>,
+);
+
+/// Default Acess Container Entry
+pub fn default_access_container_entry() -> AccessContainerEntry {
+    (AuthToken::default(), HashMap::default())
+}
 
 /// Convert `AccessContainerEntry` to FFI representation.
 pub fn access_container_entry_into_repr_c(
     entry: AccessContainerEntry,
-) -> Result<ffi::AccessContainerEntry, NulError> {
-    let mut vec = Vec::with_capacity(entry.len());
+) -> Result<ffi::AccessContainerEntry, IpcError> {
+    let mut vec = Vec::with_capacity(entry.1.len());
 
-    for (name, (mdata_info, permissions)) in entry {
+    for (name, (mdata_info, permissions)) in entry.1 {
         vec.push(ffi::ContainerInfo {
             name: CString::new(name)?.into_raw(),
             mdata_info: mdata_info.into_repr_c(),
@@ -148,8 +159,10 @@ pub fn access_container_entry_into_repr_c(
     }
 
     let (containers, containers_len) = vec_into_raw_parts(vec);
+    let auth_token = FfiAuthTokens::from_native_to_repr_c(entry.0)?;
 
     Ok(ffi::AccessContainerEntry {
+        auth_token,
         containers,
         containers_len,
     })
@@ -167,7 +180,8 @@ pub unsafe fn access_container_entry_clone_from_repr_c(
     entry: *const ffi::AccessContainerEntry,
 ) -> Result<AccessContainerEntry, IpcError> {
     let input = slice::from_raw_parts((*entry).containers, (*entry).containers_len);
-    let mut output = AccessContainerEntry::with_capacity(input.len());
+    let token = (*entry).auth_token.to_native()?;
+    let mut output = HashMap::with_capacity(input.len());
 
     for container in input {
         let name = String::clone_from_repr_c(container.name)?;
@@ -177,7 +191,50 @@ pub unsafe fn access_container_entry_clone_from_repr_c(
         let _ = output.insert(name, (mdata_info, permissions));
     }
 
-    Ok(output)
+    Ok((token, output))
+}
+
+/// FFI Wrapper for AuthTokens
+#[repr(C)]
+pub struct FfiAuthTokens {
+    /// Auth token version
+    pub version: usize,
+    /// Caveats for verifying for token to be considered valid.
+    pub caveats: *mut Caveat,
+    /// Size of Caveats vector
+    pub caveats_len: usize,
+    /// Signature of the serialized token for validation against tampering.
+    pub signature: *mut u8,
+    /// Signature length
+    pub signature_len: usize,
+}
+
+impl FfiAuthTokens {
+    fn from_native_to_repr_c(token: AuthToken) -> Result<Self, IpcError> {
+        let (caveats, caveats_len) = vec_into_raw_parts(token.caveats);
+        let q = serialize(&token.signature)?;
+        let (signature, signature_len) = vec_into_raw_parts(q);
+
+        Ok(Self {
+            version: token.version,
+            caveats,
+            caveats_len,
+            signature,
+            signature_len,
+        })
+    }
+
+    fn to_native(&self) -> Result<AuthToken, IpcError> {
+        let version = self.version;
+        let caveats = unsafe { vec_from_raw_parts(self.caveats, self.caveats_len) };
+        let raw_signature = unsafe { vec_from_raw_parts(self.signature, self.signature_len) };
+        let signature: Option<safe_nd::Signature> = deserialize(raw_signature.as_slice())?;
+        Ok(AuthToken {
+            version,
+            caveats,
+            signature,
+        })
+    }
 }
 
 /// Access container

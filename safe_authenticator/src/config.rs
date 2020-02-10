@@ -19,8 +19,8 @@ use safe_core::core_structs::AppKeys;
 use safe_core::fry;
 use safe_core::ipc::req::AppExchangeInfo;
 use safe_core::{Client, CoreError, FutureExt};
-use safe_nd::IpcError;
 use safe_nd::{AppPermissions, EntryError, Error as SndError, MDataSeqEntryActions};
+use safe_nd::{AuthToken, IpcError};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use tiny_keccak::sha3_256;
@@ -40,6 +40,8 @@ pub struct AppInfo {
     pub keys: AppKeys,
     /// Application permissions
     pub perms: AppPermissions,
+    /// App's AuthToken
+    pub token: AuthToken,
 }
 
 /// Config file key under which the list of registered apps is stored.

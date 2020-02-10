@@ -13,13 +13,13 @@ use futures::future::Future;
 use log::trace;
 use safe_authenticator::test_utils::{create_authenticator, register_app};
 use safe_authenticator::{run as auth_run, AuthError};
-use safe_core::utils::test_utils::random_client;
+use safe_core::utils::test_utils::{random_client, test_generate_signed_token};
 use safe_core::{AuthActions, Client, CoreError, FutureExt};
 use safe_nd::{
     AData, ADataAddress, ADataAppendOperation, ADataEntry, ADataIndex, ADataOwner,
     ADataPubPermissionSet, ADataPubPermissions, ADataUnpubPermissionSet, ADataUnpubPermissions,
-    ADataUser, AppPermissions, Error as SndError, PubSeqAppendOnlyData, PubUnseqAppendOnlyData,
-    PublicKey, UnpubSeqAppendOnlyData, UnpubUnseqAppendOnlyData, XorName,
+    ADataUser, Error as SndError, PubSeqAppendOnlyData, PubUnseqAppendOnlyData, PublicKey,
+    UnpubSeqAppendOnlyData, UnpubUnseqAppendOnlyData, XorName,
 };
 use std::collections::BTreeMap;
 use std::sync::mpsc;
@@ -350,6 +350,7 @@ fn managing_permissions_for_an_app() {
 // The client then revokes the app by removing it from its list of authorised apps. The app should not
 // be able to append to the data anymore. But it should still be able to read the data since if it is published.
 // The client tries to delete the data. It should pass if the data is unpublished. Deleting published data should fail.
+#[ignore]
 #[test]
 fn restricted_access_and_deletion() {
     let name: XorName = rand::random();
@@ -457,6 +458,7 @@ fn restricted_access_and_deletion() {
                 let client4 = client.clone();
                 let client5 = client.clone();
                 let client6 = client.clone();
+                let token = test_generate_signed_token(client.full_id());
 
                 unwrap!(adata.append_owner(
                     ADataOwner {
@@ -487,15 +489,7 @@ fn restricted_access_and_deletion() {
                     .and_then(move |(_, version)| {
                         let app_key: PublicKey = unwrap!(app_key_rx.recv());
                         client3
-                            .ins_auth_key(
-                                app_key,
-                                AppPermissions {
-                                    transfer_coins: true,
-                                    perform_mutations: true,
-                                    get_balance: true,
-                                },
-                                version + 1,
-                            )
+                            .ins_auth_key(app_key, token, version + 1)
                             .map(move |()| (app_key, version + 1))
                     })
                     .and_then(move |(key, version)| {

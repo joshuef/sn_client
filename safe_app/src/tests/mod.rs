@@ -18,8 +18,7 @@ use crate::{run, App, AppError};
 use ffi_utils::test_utils::call_1;
 use futures::Future;
 use log::trace;
-use safe_authenticator::test_utils as authenticator;
-use safe_authenticator::test_utils::revoke;
+use safe_authenticator::test_utils::{self as authenticator, revoke};
 use safe_authenticator::{run as auth_run, AuthError, Authenticator};
 use safe_core::btree_set;
 use safe_core::ipc::req::{AppExchangeInfo, AuthReq};
@@ -32,13 +31,136 @@ use safe_core::{Client, CoreError};
 use safe_nd::{
     ADataAddress, ADataOwner, AppPermissions, AppendOnlyData, Coins, Error as SndError,
     PubImmutableData, PubSeqAppendOnlyData, PubUnseqAppendOnlyData, UnpubUnseqAppendOnlyData,
-    XorName,
+    XorName, GET_BALANCE, PERFORM_MUTATIONS, TRANSFER_COINS,
 };
 #[cfg(feature = "mock-network")]
 use safe_nd::{RequestType, Response};
 use std::collections::HashMap;
 use std::rc::Rc;
 use unwrap::unwrap;
+
+// App Tokens test:
+// 1. Authenticate an app A.
+// 2. Send request as app A assert that tokens are valid.
+// 3. Re-authenticate app A again with new permissions so that token gets updated.
+// 4. Assert if the tokens are updated by sending the older token - should fail.
+// 5. Assert again with the new token - should pass.
+#[test]
+pub fn app_tokens_test() {
+    let auth = authenticator::create_account_and_login();
+    let app_info = authenticator::rand_app();
+
+    let app_permissions1 = AppPermissions {
+        transfer_coins: true,
+        perform_mutations: true,
+        get_balance: true,
+    };
+
+    // Authenticate App A
+    let auth_response = unwrap!(authenticator::register_app(
+        &auth,
+        &AuthReq {
+            app: app_info.clone(),
+            app_container: false,
+            app_permissions: app_permissions1,
+            containers: HashMap::new(),
+        },
+    ));
+
+    let old_token = auth_response.clone().token;
+    // Verify the token
+    unwrap!(auth_run(&auth, move |client| {
+        // Verify if the signature is signed by the client and is verifiable by client's public ID
+        assert!(old_token
+            .is_valid_for_public_key(&client.public_id().public_key())
+            .is_ok());
+
+        // Verify the contents in the Caveat
+        assert!(old_token
+            .verify_caveat(GET_BALANCE, |content| content == "true")
+            .is_ok());
+
+        assert!(old_token
+            .verify_caveat(PERFORM_MUTATIONS, |content| content == "true")
+            .is_ok());
+
+        assert!(old_token
+            .verify_caveat(TRANSFER_COINS, |content| content == "true")
+            .is_ok());
+        Ok(())
+    }));
+
+    let app = unwrap!(App::registered(app_info.id.clone(), auth_response, || ()));
+
+    // Send requests to check app permissions before updating token - should pass
+    unwrap!(run(&app, move |client, _| {
+        client
+            .get_balance(None)
+            .map_err(AppError::from)
+            .then(move |res| {
+                match res {
+                    Ok(_) => (),
+                    Err(e) => panic!("Unexpected Error: {:?}", e),
+                }
+                Ok(())
+            })
+    }));
+
+    // Re-authenticate the app with new permissions
+    let app_permissions2 = AppPermissions {
+        transfer_coins: false,
+        perform_mutations: false,
+        get_balance: false,
+    };
+
+    let auth_response_new = unwrap!(authenticator::register_app(
+        &auth,
+        &AuthReq {
+            app: app_info.clone(),
+            app_container: false,
+            app_permissions: app_permissions2,
+            containers: HashMap::new(),
+        },
+    ));
+    let new_token = auth_response_new.token.clone();
+
+    // Generates new App instance for the the re-authenticated app (which holds the new token).
+    let app_new = unwrap!(App::registered(app_info.id, auth_response_new, || ()));
+
+    // Send GetBalance request to check from old app instance holding the old token - should fail
+    // as the token is now updated at CH.
+    unwrap!(run(&app, move |client, _| {
+        client
+            .get_balance(None)
+            .map_err(AppError::from)
+            .then(move |res| {
+                match res {
+                    Ok(s) => panic!("Unexpected Success: {:?}", s),
+                    Err(AppError::CoreError(CoreError::DataError(SndError::AccessDenied(_)))) => (),
+                    Err(e) => panic!("Unexpected Error: {:?}", e),
+                }
+                Ok(())
+            })
+    }));
+
+    // Send GetBalance request from new app instance holding the new token - should fail
+    // as permissions are denied.
+    unwrap!(run(&app_new, move |client, _| {
+    let token = unwrap!(client.token());
+    assert_eq!(new_token, token);
+        client
+            .get_balance(None)
+            .map_err(AppError::from)
+            .then(move |res| {
+                match res {
+                    Ok(s) => panic!("Unexpected Success: {:?}", s),
+                    Err(AppError::CoreError(CoreError::DataError(SndError::AccessDenied(_)))) => (),
+                    Err(e) => panic!("Unexpected Error: {:?}", e),
+                }
+                Ok(())
+            })
+    }));
+}
 
 // Test refreshing access info by fetching it from the network.
 #[test]
@@ -56,13 +178,14 @@ fn refresh_access_info() {
 
     unwrap!(run(&app, move |client, context| {
         let reg = Rc::clone(unwrap!(context.as_registered()));
-        assert!(reg.access_info.borrow().is_empty());
+        let containers = reg.access_info.borrow().1.clone();
+        assert!(containers.is_empty());
 
         context.refresh_access_info(client).then(move |result| {
             unwrap!(result);
-            let access_info = reg.access_info.borrow();
+            let refreshed_containers = &reg.access_info.borrow().1;
             assert_eq!(
-                unwrap!(access_info.get("_videos")).1,
+                unwrap!(refreshed_containers.get("_videos")).1,
                 *unwrap!(container_permissions.get("_videos"))
             );
 
@@ -97,7 +220,7 @@ fn get_access_info() {
 
     unwrap!(run(unsafe { &*app }, move |client, context| {
         context.get_access_info(client).then(move |res| {
-            let info = unwrap!(res);
+            let info = unwrap!(res).1;
             assert!(info.contains_key(&"_videos".to_string()));
             assert!(info.contains_key(&"_downloads".to_string()));
             assert_eq!(info.len(), 3); // third item is the app container
@@ -185,7 +308,7 @@ fn num_containers(app: &App) -> usize {
 
     unwrap!(run(app, move |client, context| {
         context.get_access_info(client).then(move |res| {
-            let info = unwrap!(res);
+            let info = unwrap!(res).1;
             Ok(info.len())
         })
     }))

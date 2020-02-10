@@ -15,10 +15,11 @@ use bincode::{deserialize, serialize};
 use fs2::FileExt;
 use log::{debug, trace, warn};
 use safe_nd::{
-    verify_signature, AData, ADataAction, ADataAddress, ADataIndex, AppPermissions, AppendOnlyData,
+    verify_signature, AData, ADataAction, ADataAddress, ADataIndex, AppendOnlyData, AuthToken,
     Coins, Data, Error as SndError, IData, IDataAddress, LoginPacket, MData, MDataAction,
     MDataAddress, MDataKind, Message, PublicId, PublicKey, Request, RequestType, Response,
-    Result as SndResult, SeqAppendOnly, Transaction, UnseqAppendOnly, XorName,
+    Result as SndResult, SeqAppendOnly, Transaction, UnseqAppendOnly, XorName, GET_BALANCE,
+    PERFORM_MUTATIONS, TRANSFER_COINS,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -258,6 +259,7 @@ impl Vault {
         operations: &[Operation],
         owner: XorName,
         requester_pk: PublicKey,
+        token: &Option<AuthToken>,
     ) -> Result<(), SndError> {
         let requester = XorName::from(requester_pk);
         let balance = self.get_balance(&owner)?;
@@ -273,6 +275,9 @@ impl Vault {
             }
             return Ok(());
         }
+
+        // Safe to unwrap as the client check happens in the previous block.
+        let token: AuthToken = unwrap!(token.clone());
         // Fetches the account of the owner
         let account = self.get_account(&owner).ok_or_else(|| {
             debug!("Account not found for {:?}", owner);
@@ -280,18 +285,22 @@ impl Vault {
         })?;
 
         // TODO: Check token caveats here....
-
         // Fetches permissions granted to the application
-        let perms = account.auth_keys().get(&requester_pk).ok_or_else(|| {
+        if !account.auth_keys().contains_key(&requester_pk) {
             debug!("App not authorised");
-            SndError::AccessDenied("Permission denied, app not authorised".to_string())
-        })?;
+            return Err(SndError::AccessDenied(
+                "Permission denied, app not authorised".to_string(),
+            ));
+        }
         // Iterates over the list of operations requested to authorise.
         // Will fail to authorise any even if one of the requested operations had been denied.
         for operation in operations {
             match operation {
                 Operation::TransferCoins => {
-                    if !perms.transfer_coins {
+                    if token
+                        .verify_caveat(TRANSFER_COINS, |content| content == "true")
+                        .is_err()
+                    {
                         debug!("Transfer coins not authorised");
                         return Err(SndError::AccessDenied(
                             "Coin transfer permission denied".to_string(),
@@ -299,7 +308,10 @@ impl Vault {
                     }
                 }
                 Operation::GetBalance => {
-                    if !perms.get_balance {
+                    if token
+                        .verify_caveat(GET_BALANCE, |content| content == "true")
+                        .is_err()
+                    {
                         debug!("Reading balance not authorised");
                         return Err(SndError::AccessDenied(
                             "Get balance permission denied".to_string(),
@@ -307,7 +319,10 @@ impl Vault {
                     }
                 }
                 Operation::Mutation => {
-                    if !perms.perform_mutations {
+                    if token
+                        .verify_caveat(PERFORM_MUTATIONS, |content| content == "true")
+                        .is_err()
+                    {
                         debug!("Performing mutations not authorised");
                         return Err(SndError::AccessDenied(
                             "Mutation permission denied".to_string(),
@@ -417,20 +432,18 @@ impl Vault {
         .and_then(|(is_app, requester_pk, owner_pk)| {
             let request_type = request.get_type();
 
+            let auth_keys = self
+                .get_account(&requester.name())
+                .map(|account| (account.auth_keys().clone()))
+                .unwrap_or_else(Default::default);
+
             match request_type {
                 RequestType::PrivateGet | RequestType::Mutation | RequestType::Transaction => {
                     // For apps, check if its public key is listed as an auth key.
-                    if is_app {
-                        let auth_keys = self
-                            .get_account(&requester.name())
-                            .map(|account| (account.auth_keys().clone()))
-                            .unwrap_or_else(Default::default);
-
-                        if !auth_keys.contains_key(&requester_pk) {
-                            return Err(SndError::AccessDenied(
-                                "Permission denied app is not authorised".to_string(),
-                            ));
-                        }
+                    if is_app && !auth_keys.contains_key(&requester_pk) {
+                        return Err(SndError::AccessDenied(
+                            "Permission denied app is not authorised".to_string(),
+                        ));
                     }
 
                     // Verify signature if the request is not a GET for public data.
@@ -451,6 +464,22 @@ impl Vault {
                                 return Err(SndError::AccessDenied("Missing Token".to_string()))
                             }
                         };
+
+                        if let Some(hash) = auth_keys.get(&requester_pk) {
+                            let serialized_token = serialize(the_token).map_err(|_| {
+                                SndError::FailedToParse("Error serializing caveats".to_string())
+                            })?;
+                            let hashed_token = tiny_keccak::sha3_256(serialized_token.as_slice());
+                            if hashed_token != *hash {
+                                return Err(SndError::AccessDenied(
+                                    "Permission denied: Token not current".to_string(),
+                                ));
+                            }
+                        } else {
+                            return Err(SndError::AccessDenied(
+                                "Permission denied: Token hash missing".to_string(),
+                            ));
+                        }
 
                         trace!("Processing req of App w/ token {:?}", the_token);
 
@@ -511,6 +540,7 @@ impl Vault {
                         DataId::Immutable(*idata.address()),
                         Data::Immutable(idata),
                         requester,
+                        token,
                     )
                 };
                 Response::Mutation(result)
@@ -532,13 +562,17 @@ impl Vault {
             }
             Request::InsAuthKey {
                 key,
-                permissions,
+                token,
                 version,
             } => {
                 let result = if owner_pk != requester_pk {
                     Err(SndError::AccessDenied("Not the owner".to_string()))
                 } else {
-                    self.ins_auth_key(&requester.name(), key, permissions, version)
+                    let serialized_token = serialize(&token).map_err(|_| {
+                        SndError::FailedToParse("Error serializing caveats".to_string())
+                    })?;
+                    let hash = tiny_keccak::sha3_256(serialized_token.as_slice());
+                    self.ins_auth_key(&requester.name(), key, &hash, version)
                 };
                 Response::Mutation(result)
             }
@@ -561,10 +595,13 @@ impl Vault {
                 let result = if amount.as_nano() == 0 {
                     Err(SndError::InvalidOperation)
                 } else {
-                    self.authorise_operations(&[Operation::TransferCoins], source, requester_pk)
-                        .and_then(|()| {
-                            self.transfer_coins(source, destination, amount, transaction_id)
-                        })
+                    self.authorise_operations(
+                        &[Operation::TransferCoins],
+                        source,
+                        requester_pk,
+                        token,
+                    )
+                    .and_then(|()| self.transfer_coins(source, destination, amount, transaction_id))
                 };
                 Response::Transaction(result)
             }
@@ -587,7 +624,7 @@ impl Vault {
                     if amount == unwrap!(Coins::from_str("0")) {
                         req_perms.push(Operation::TransferCoins);
                     }
-                    self.authorise_operations(req_perms.as_slice(), source, requester_pk)
+                    self.authorise_operations(req_perms.as_slice(), source, requester_pk, token)
                         .and_then(|_| self.get_balance(&source))
                         .and_then(|source_balance| {
                             let total_amount = amount
@@ -609,7 +646,12 @@ impl Vault {
                 let coin_balance_id = owner_pk.into();
 
                 let result = self
-                    .authorise_operations(&[Operation::GetBalance], coin_balance_id, requester_pk)
+                    .authorise_operations(
+                        &[Operation::GetBalance],
+                        coin_balance_id,
+                        requester_pk,
+                        token,
+                    )
                     .and_then(move |_| self.get_balance(&coin_balance_id));
                 Response::GetBalance(result)
             }
@@ -630,7 +672,7 @@ impl Vault {
                     if amount == unwrap!(Coins::from_str("0")) {
                         req_perms.push(Operation::TransferCoins);
                     }
-                    self.authorise_operations(req_perms.as_slice(), source, requester_pk)
+                    self.authorise_operations(req_perms.as_slice(), source, requester_pk, token)
                 } {
                     Err(e)
                 } else {
@@ -677,7 +719,7 @@ impl Vault {
                 let source = owner_pk.into();
 
                 if let Err(e) =
-                    self.authorise_operations(&[Operation::Mutation], source, requester_pk)
+                    self.authorise_operations(&[Operation::Mutation], source, requester_pk, token)
                 {
                     Response::Mutation(Err(e))
                 } else if self.get_login_packet(account_data.destination()).is_some() {
@@ -747,7 +789,12 @@ impl Vault {
                 let result = if data.owner() != owner_pk {
                     Err(SndError::InvalidOwners)
                 } else {
-                    self.put_data(DataId::Mutable(address), Data::Mutable(data), requester)
+                    self.put_data(
+                        DataId::Mutable(address),
+                        Data::Mutable(data),
+                        requester,
+                        token,
+                    )
                 };
                 Response::Mutation(result)
             }
@@ -968,6 +1015,7 @@ impl Vault {
                                 DataId::AppendOnly(address),
                                 Data::AppendOnly(adata),
                                 requester,
+                                token,
                             )
                         }
                     }
@@ -1337,6 +1385,7 @@ impl Vault {
         data_name: DataId,
         data: Data,
         requester: PublicId,
+        token: &Option<AuthToken>,
     ) -> SndResult<()> {
         let (name, key) = match requester.clone() {
             PublicId::Client(client_public_id) => {
@@ -1347,7 +1396,7 @@ impl Vault {
             }
             _ => return Err(SndError::AccessDenied("Permission denied".to_string())),
         };
-        self.authorise_operations(&[Operation::Mutation], name, key)?;
+        self.authorise_operations(&[Operation::Mutation], name, key, token)?;
         if self.contains_data(&data_name) {
             // Published Immutable Data is de-duplicated
             if let DataId::Immutable(addr) = data_name {
@@ -1367,7 +1416,7 @@ impl Vault {
     fn list_auth_keys_and_version(
         &mut self,
         name: &XorName,
-    ) -> (BTreeMap<PublicKey, AppPermissions>, u64) {
+    ) -> (BTreeMap<PublicKey, [u8; 32]>, u64) {
         if self.get_account(&name).is_none() {
             self.insert_account(*name);
         }
@@ -1380,7 +1429,7 @@ impl Vault {
         &mut self,
         name: &XorName,
         key: PublicKey,
-        permissions: AppPermissions,
+        permissions: &[u8; 32],
         version: u64,
     ) -> SndResult<()> {
         if self.get_account(&name).is_none() {

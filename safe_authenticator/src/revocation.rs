@@ -143,6 +143,7 @@ fn revoke_single_app(client: &AuthClient, app_id: &str) -> Box<AuthFuture<()>> {
                 move |(version, ac_entry)| {
                     if let Some(ac_entry) = ac_entry {
                         let containers: Containers = ac_entry
+                            .1
                             .into_iter()
                             .map(|(name, (mdata_info, _))| (name, mdata_info))
                             .collect();

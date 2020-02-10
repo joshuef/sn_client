@@ -22,7 +22,10 @@ use futures::sync::mpsc;
 use futures::{Future, IntoFuture};
 use log::trace;
 use rand;
-use safe_nd::{AppFullId, AuthToken, ClientFullId, ClientPublicId, Coins, Keypair, SafeKey};
+use safe_nd::{
+    AppFullId, AppPermissions, AuthToken, ClientFullId, ClientPublicId, Coins, Keypair, SafeKey,
+    GET_BALANCE, PERFORM_MUTATIONS, TRANSFER_COINS,
+};
 use std::fmt::Debug;
 use std::sync::mpsc as std_mpsc;
 use tokio::runtime::current_thread::{Handle, Runtime};
@@ -59,7 +62,37 @@ pub fn test_generate_signed_token(safe_key: SafeKey) -> AuthToken {
     let caveat = ("expire".to_string(), "nowthen".to_string());
 
     token.add_caveat(caveat, &safe_key).unwrap();
-    println!("Generated test token..........");
+    token
+}
+
+/// Generate a token with AppPermissions
+pub fn test_generate_signed_token_with_app_perms(
+    safe_key: SafeKey,
+    perms: AppPermissions,
+) -> AuthToken {
+    let mut token = AuthToken::new().unwrap();
+
+    let AppPermissions {
+        transfer_coins,
+        perform_mutations,
+        get_balance,
+    } = perms;
+
+    let _ = token.add_caveat(
+        (TRANSFER_COINS.to_string(), transfer_coins.to_string()),
+        &safe_key,
+    );
+
+    let _ = token.add_caveat(
+        (PERFORM_MUTATIONS.to_string(), perform_mutations.to_string()),
+        &safe_key,
+    );
+
+    let _ = token.add_caveat(
+        (GET_BALANCE.to_string(), get_balance.to_string()),
+        &safe_key,
+    );
+
     token
 }
 

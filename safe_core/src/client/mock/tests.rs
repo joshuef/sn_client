@@ -17,8 +17,10 @@ use safe_nd::SafeKey;
 use super::connection_manager::ConnectionManager;
 use crate::btree_map;
 use crate::config_handler::{Config, DevConfig};
-use crate::utils::test_utils::test_generate_signed_token;
 use crate::utils::test_utils::{gen_app_id, gen_client_id};
+use crate::utils::test_utils::{
+    test_generate_signed_token, test_generate_signed_token_with_app_perms,
+};
 use crate::{utils, NetworkEvent, QuicP2pConfig};
 use bincode::serialize;
 use futures::sync::mpsc::{self, UnboundedReceiver};
@@ -719,8 +721,6 @@ fn mutable_data_permissions() {
     let data = SeqMutableData::new_with_data(name, tag, entries, Default::default(), owner_key);
     let address: MDataAddress = *data.address();
 
-    let token_signed_by_client = Some(test_generate_signed_token(client_safe_key.clone()));
-
     // Put it to the network.
     send_req_expect_ok!(
         &mut connection_manager,
@@ -755,15 +755,16 @@ fn mutable_data_permissions() {
     );
 
     // Create app and authorise it.
-    let (app_safe_key, mut app_connection_manager, _) = test_register_new_app(
-        &mut connection_manager,
-        &client_safe_key,
-        AppPermissions {
-            get_balance: true,
-            transfer_coins: true,
-            perform_mutations: true,
-        },
-    );
+    let (app_safe_key, mut app_connection_manager, _, token_signed_by_client) =
+        test_register_new_app(
+            &mut connection_manager,
+            &client_safe_key,
+            AppPermissions {
+                get_balance: true,
+                transfer_coins: true,
+                perform_mutations: true,
+            },
+        );
 
     // App can't mutate any entry, by default.
     let value0_v2 = unwrap!(utils::generate_random_vector(10));
@@ -775,7 +776,7 @@ fn mutable_data_permissions() {
     send_req_expect_access_denied!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         mutation_request.clone(),
         "Not the owner"
     );
@@ -793,7 +794,7 @@ fn mutable_data_permissions() {
     send_req_expect_access_denied!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         update_perms_req.clone(),
         "Problem accessing permissions"
     );
@@ -803,7 +804,7 @@ fn mutable_data_permissions() {
     send_req_expect_access_denied!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         mutation_request.clone(),
         "Not the owner"
     );
@@ -845,7 +846,7 @@ fn mutable_data_permissions() {
     send_req_expect_access_denied!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         insertion_request.clone(),
         "Not the owner"
     );
@@ -862,7 +863,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         Request::MutateMDataEntries {
             address,
             actions: actions.into(),
@@ -909,7 +910,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         insertion_request,
         ()
     );
@@ -931,7 +932,7 @@ fn mutable_data_permissions() {
     send_req_expect_access_denied!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         mutation_request.clone(),
         "Not the owner"
     );
@@ -955,7 +956,7 @@ fn mutable_data_permissions() {
     send_req_expect_access_denied!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         mutation_request,
         "Not the owner"
     );
@@ -965,7 +966,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         Request::SetMDataUserPermissions {
             address,
             user: app_safe_key.public_key(),
@@ -981,7 +982,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut app_connection_manager,
         &app_safe_key,
-        token_signed_by_client,
+        Some(token_signed_by_client),
         Request::MutateMDataEntries {
             address,
             actions: actions.into()
@@ -997,7 +998,7 @@ fn mutable_data_ownership() {
     let (mut connection_manager, _, client_safe_key, owner_key) = setup(None);
 
     // Create app's connection_manager
-    let (app_safe_key, mut connection_manager2, _) = test_register_new_app(
+    let (app_safe_key, mut connection_manager2, _, token_signed_by_client) = test_register_new_app(
         &mut connection_manager,
         &client_safe_key,
         AppPermissions {
@@ -1007,8 +1008,6 @@ fn mutable_data_ownership() {
         },
     );
 
-    let token_signed_by_client = Some(test_generate_signed_token(client_safe_key));
-
     // Attempt to put MutableData using the app sign key as owner key should fail.
     let name = rand::random();
     let tag = 1000u64;
@@ -1016,7 +1015,7 @@ fn mutable_data_ownership() {
     send_req_expect_failure!(
         &mut connection_manager2,
         &app_safe_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         Request::PutMData(SeqMutableData::new(name, tag, app_safe_key.public_key()).into()),
         Error::InvalidOwners
     );
@@ -1027,7 +1026,7 @@ fn mutable_data_ownership() {
     send_req_expect_ok!(
         &mut connection_manager,
         &app_safe_key,
-        token_signed_by_client,
+        Some(token_signed_by_client),
         Request::PutMData(data),
         ()
     );
@@ -1073,7 +1072,7 @@ fn pub_idata_rpc() {
         perform_mutations: true,
     };
 
-    let (app_key, mut app_conn_manager, _) =
+    let (app_key, mut app_conn_manager, _, _) =
         test_register_new_app(&mut connection_manager2, &client2_safe_key, app_perms);
 
     // Get pub idata while not being an owner. Should succeed.
@@ -1125,17 +1124,15 @@ fn unpub_idata_rpc() {
         perform_mutations: true,
     };
 
-    let (mut conn_manager2, _, client2_safe_key, _) = setup(None);
-    let (app_key, mut app_conn_manager, _) =
-        test_register_new_app(&mut conn_manager2, &client2_safe_key, app_perms);
-
-    let token_signed_by_another_client = Some(test_generate_signed_token(another_client_safe_key));
+    let (mut conn_manager2, _, _client2_safe_key, _) = setup(None);
+    let (app_key, mut app_conn_manager, _, token_signed_by_another_client) =
+        test_register_new_app(&mut conn_manager2, &another_client_safe_key, app_perms);
 
     // Try to get unpub idata while not being an owner. Should fail.
     send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
-        token_signed_by_another_client.clone(),
+        Some(token_signed_by_another_client.clone()),
         get_request,
         "Not the owner"
     );
@@ -1145,7 +1142,7 @@ fn unpub_idata_rpc() {
     send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
-        token_signed_by_another_client,
+        Some(token_signed_by_another_client),
         del_request,
         "Not the owner"
     );
@@ -1197,15 +1194,12 @@ fn auth_keys() {
 
     let app_key = PublicKey::from(SecretKey::random().public_key());
 
+    let token = test_generate_signed_token(client_safe_key.clone());
     // Attempt to insert auth key without proper version bump fails.
     let test_ins_auth_key_req = Request::InsAuthKey {
         key: app_key,
         version: 0,
-        permissions: AppPermissions {
-            transfer_coins: true,
-            get_balance: true,
-            perform_mutations: true,
-        },
+        token: token.clone(),
     };
 
     let error = Error::InvalidSuccessor(0);
@@ -1222,11 +1216,7 @@ fn auth_keys() {
     let ins_auth_key_req = Request::InsAuthKey {
         key: app_key,
         version: 1,
-        permissions: AppPermissions {
-            transfer_coins: true,
-            get_balance: true,
-            perform_mutations: true,
-        },
+        token,
     };
 
     send_req_expect_ok!(
@@ -1247,9 +1237,7 @@ fn auth_keys() {
     match response {
         Response::ListAuthKeysAndVersion(res) => match res {
             Ok(keys) => {
-                assert_eq!(unwrap!(keys.0.get(&app_key)).transfer_coins, true);
-                assert_eq!(unwrap!(keys.0.get(&app_key)).get_balance, true);
-                assert_eq!(unwrap!(keys.0.get(&app_key)).perform_mutations, true);
+                assert!(keys.0.get(&app_key).is_some());
                 assert_eq!(keys.1, 1);
             }
             Err(e) => panic!("Unexpected error: {:?}", e),
@@ -1334,10 +1322,8 @@ fn auth_actions_from_app() {
         perform_mutations: true,
     };
 
-    let token_signed_by_client = Some(test_generate_signed_token(client_safe_key.clone()));
-
     // Creates an App instance
-    let (app_key, mut app_conn_manager, _) =
+    let (app_key, mut app_conn_manager, _, token_signed_by_client) =
         test_register_new_app(&mut connection_manager, &client_safe_key, app_perms);
 
     let name = XorName(rand::random());
@@ -1377,7 +1363,7 @@ fn auth_actions_from_app() {
     send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         Request::DeleteMData(address),
         "Not the owner"
     );
@@ -1386,7 +1372,7 @@ fn auth_actions_from_app() {
     send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
-        token_signed_by_client.clone(),
+        Some(token_signed_by_client.clone()),
         Request::ListAuthKeysAndVersion,
         "Not the owner"
     );
@@ -1395,7 +1381,7 @@ fn auth_actions_from_app() {
     send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
-        token_signed_by_client,
+        Some(token_signed_by_client),
         Request::DelAuthKey {
             key: app_key.public_key(),
             version: 1,
@@ -1709,7 +1695,12 @@ fn test_register_new_app(
     conn_manager: &mut ConnectionManager,
     client_safe_key: &SafeKey,
     permissions: AppPermissions,
-) -> (SafeKey, ConnectionManager, UnboundedReceiver<NetworkEvent>) {
+) -> (
+    SafeKey,
+    ConnectionManager,
+    UnboundedReceiver<NetworkEvent>,
+    AuthToken,
+) {
     let client_id = unwrap!(client_safe_key.public_id().client_public_id()).clone();
     let app_full_id = gen_app_id(client_id);
     let response = test_process_request(
@@ -1720,6 +1711,7 @@ fn test_register_new_app(
     );
     let (_, version): (_, u64) = unwrap!(response.try_into());
 
+    let token = test_generate_signed_token_with_app_perms(client_safe_key.clone(), permissions);
     send_req_expect_ok!(
         conn_manager,
         client_safe_key,
@@ -1727,7 +1719,7 @@ fn test_register_new_app(
         Request::InsAuthKey {
             key: *app_full_id.public_id().public_key(),
             version: version + 1,
-            permissions
+            token: token.clone(),
         },
         ()
     );
@@ -1737,5 +1729,6 @@ fn test_register_new_app(
         SafeKey::app(app_full_id),
         connection_manager,
         conn_manager_rx,
+        token,
     )
 }

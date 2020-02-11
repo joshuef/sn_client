@@ -50,6 +50,16 @@ macro_rules! send_req_expect_failure {
     };
 }
 
+// Helper macro to fetch the response for a request and
+// assert that the expected AccessDenied error is returned.
+macro_rules! send_req_expect_access_denied {
+    ($cm:expr, $sender:expr, $token:expr, $req:expr, $err:expr) => {
+        let expected_response = $req.error_response(Error::AccessDenied($err.to_string()));
+        let response = test_process_request($cm, $sender, $token, $req);
+        assert_eq!(response, expected_response);
+    };
+}
+
 macro_rules! send_req_expect_ok {
     ($cm:expr, $sender:expr, $token:expr, $req:expr, $res:expr) => {
         let response = test_process_request($cm, $sender, $token, $req);
@@ -762,12 +772,12 @@ fn mutable_data_permissions() {
         address,
         actions: actions.into(),
     };
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut connection_manager2,
         &app_safe_key,
         token_signed_by_client.clone(),
         mutation_request.clone(),
-        Error::AccessDenied
+        "Not the owner"
     );
 
     // App can't grant itself permission to update and read.
@@ -780,22 +790,22 @@ fn mutable_data_permissions() {
         permissions,
         version: 1,
     };
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         update_perms_req.clone(),
-        Error::AccessDenied
+        "Problem accessing permissions"
     );
 
     // Verify app still can't update, after the previous attempt to
     // modify its permissions.
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut connection_manager2,
         &app_safe_key,
         token_signed_by_client.clone(),
         mutation_request.clone(),
-        Error::AccessDenied
+        "Not the owner"
     );
 
     // Grant read and update permission for app.
@@ -832,12 +842,12 @@ fn mutable_data_permissions() {
         address,
         actions: actions.into(),
     };
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut connection_manager2,
         &app_safe_key,
         token_signed_by_client.clone(),
         insertion_request.clone(),
-        Error::AccessDenied
+        "Not the owner"
     );
 
     // But it can update an entry.
@@ -918,12 +928,12 @@ fn mutable_data_permissions() {
     );
 
     // App can no longer mutate the entries.
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut connection_manager2,
         &app_safe_key,
         token_signed_by_client.clone(),
         mutation_request.clone(),
-        Error::AccessDenied
+        "Not the owner"
     );
 
     // Grant the app permission to manage permissions.
@@ -942,12 +952,12 @@ fn mutable_data_permissions() {
     );
 
     // The app still can't mutate the entries.
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut connection_manager2,
         &app_safe_key,
         token_signed_by_client.clone(),
         mutation_request,
-        Error::AccessDenied
+        "Not the owner"
     );
 
     // App can modify its own permission.
@@ -1081,6 +1091,7 @@ fn pub_idata_rpc() {
 #[test]
 fn unpub_idata_rpc() {
     let (mut connection_manager, _, client_safe_key, _) = setup(None);
+    let (_, _, another_client_safe_key, _) = setup(None);
 
     let value = unwrap!(utils::generate_random_vector::<u8>(10));
     let data: IData = UnpubImmutableData::new(value, client_safe_key.public_key()).into();
@@ -1118,23 +1129,25 @@ fn unpub_idata_rpc() {
     let (app_key, mut app_conn_manager, _) =
         test_register_new_app(&mut conn_manager2, &client2_safe_key, app_perms);
 
+    let token_signed_by_another_client = Some(test_generate_signed_token(another_client_safe_key));
+
     // Try to get unpub idata while not being an owner. Should fail.
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
-        None,
+        token_signed_by_another_client.clone(),
         get_request,
-        Error::AccessDenied
+        "Not the owner"
     );
 
     let del_request = Request::DeleteUnpubIData(address);
     // Try to delete unpub idata while not being an owner. Should fail.
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
-        None,
+        token_signed_by_another_client,
         del_request,
-        Error::AccessDenied
+        "Not the owner"
     );
 }
 
@@ -1361,33 +1374,33 @@ fn auth_actions_from_app() {
     );
 
     // Delete MData called by apps should fail
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
         token_signed_by_client.clone(),
         Request::DeleteMData(address),
-        Error::AccessDenied
+        "Not the owner"
     );
 
     // List Auth Keys called by apps should fail
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
         token_signed_by_client.clone(),
         Request::ListAuthKeysAndVersion,
-        Error::AccessDenied
+        "Not the owner"
     );
 
     // Delete Auth Keys called by apps should fail
-    send_req_expect_failure!(
+    send_req_expect_access_denied!(
         &mut app_conn_manager,
         &app_key,
-        token_signed_by_client.clone(),
+        token_signed_by_client,
         Request::DelAuthKey {
             key: app_key.public_key(),
             version: 1,
         },
-        Error::AccessDenied
+        "Not the owner"
     );
 }
 

@@ -172,7 +172,7 @@ impl ErrorCode for Error {
 
 fn safe_nd_error_core(err: &SndError) -> i32 {
     match *err {
-        SndError::AccessDenied => ERR_ACCESS_DENIED,
+        SndError::AccessDenied(_) => ERR_ACCESS_DENIED,
         SndError::NoSuchLoginPacket => ERR_NO_SUCH_LOGIN_PACKET,
         SndError::LoginPacketExists => ERR_LOGIN_PACKET_EXISTS,
         SndError::NoSuchData => ERR_NO_SUCH_DATA,
@@ -191,7 +191,7 @@ fn safe_nd_error_core(err: &SndError) -> i32 {
         SndError::InvalidOwnersSuccessor(_) => ERR_INVALID_OWNERS_SUCCESSOR,
         SndError::InvalidPermissionsSuccessor(_) => ERR_INVALID_PERMISSIONS_SUCCESSOR,
         SndError::SigningKeyTypeMismatch => ERR_SIGN_KEYTYPE_MISMATCH,
-        SndError::InvalidSignature => ERR_INVALID_SIGNATURE,
+        SndError::InvalidAppSignature => ERR_INVALID_APP_SIGNATURE,
         SndError::LossOfPrecision => ERR_LOSS_OF_PRECISION,
         SndError::ExcessiveValue => ERR_EXCESSIVE_VALUE,
         SndError::NoSuchBalance => ERR_NO_SUCH_BALANCE,
@@ -200,8 +200,7 @@ fn safe_nd_error_core(err: &SndError) -> i32 {
         SndError::TransactionIdExists => ERR_TRANSACTION_ID_EXISTS,
         SndError::InsufficientBalance => ERR_INSUFFICIENT_BALANCE,
         SndError::ExceededSize => ERR_EXCEEDED_SIZE,
-        SndError::InvalidCaveats(_) => ERR_INVALID_CAVEATS,
-        SndError::InvalidToken => ERR_INVALID_TOKEN,
+        SndError::TokenCorrupt(_) => ERR_TOKEN_CORRUPT,
     }
 }
 

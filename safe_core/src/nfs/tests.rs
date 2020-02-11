@@ -234,7 +234,7 @@ fn files_stored_in_unpublished_idata() {
         file_helper::fetch(client.clone(), dir, "").then(|res| {
             match res {
                 Ok(_) => panic!("Unexpected success"),
-                Err(NfsError::CoreError(CoreError::DataError(SndError::AccessDenied))) => (),
+                Err(NfsError::CoreError(CoreError::DataError(SndError::AccessDenied(_)))) => (),
                 Err(err) => panic!("Unexpected error: {:?}", err),
             }
             Ok::<_, CoreError>(())

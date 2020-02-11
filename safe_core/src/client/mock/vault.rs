@@ -276,7 +276,7 @@ impl Vault {
         // Fetches the account of the owner
         let account = self.get_account(&owner).ok_or_else(|| {
             debug!("Account not found for {:?}", owner);
-            SndError::AccessDenied
+            SndError::AccessDenied("Permission denied, account not found".to_string())
         })?;
 
         // TODO: Check token caveats here....
@@ -284,7 +284,7 @@ impl Vault {
         // Fetches permissions granted to the application
         let perms = account.auth_keys().get(&requester_pk).ok_or_else(|| {
             debug!("App not authorised");
-            SndError::AccessDenied
+            SndError::AccessDenied("Permission denied, app not authorised".to_string())
         })?;
         // Iterates over the list of operations requested to authorise.
         // Will fail to authorise any even if one of the requested operations had been denied.
@@ -293,19 +293,25 @@ impl Vault {
                 Operation::TransferCoins => {
                     if !perms.transfer_coins {
                         debug!("Transfer coins not authorised");
-                        return Err(SndError::AccessDenied);
+                        return Err(SndError::AccessDenied(
+                            "Coin transfer permission denied".to_string(),
+                        ));
                     }
                 }
                 Operation::GetBalance => {
                     if !perms.get_balance {
                         debug!("Reading balance not authorised");
-                        return Err(SndError::AccessDenied);
+                        return Err(SndError::AccessDenied(
+                            "Get balance permission denied".to_string(),
+                        ));
                     }
                 }
                 Operation::Mutation => {
                     if !perms.perform_mutations {
                         debug!("Performing mutations not authorised");
-                        return Err(SndError::AccessDenied);
+                        return Err(SndError::AccessDenied(
+                            "Mutation permission denied".to_string(),
+                        ));
                     }
                     if !self.has_sufficient_balance(balance, *COST_OF_PUT) {
                         return Err(SndError::InsufficientBalance);
@@ -404,7 +410,9 @@ impl Vault {
         let result = match requester.clone() {
             PublicId::App(pk) => Ok((true, *pk.public_key(), *pk.owner().public_key())),
             PublicId::Client(pk) => Ok((false, *pk.public_key(), *pk.public_key())),
-            PublicId::Node(_) => Err(SndError::AccessDenied),
+            PublicId::Node(_) => Err(SndError::AccessDenied(
+                "Permission denied, neither App nor Client".to_string(),
+            )),
         }
         .and_then(|(is_app, requester_pk, owner_pk)| {
             let request_type = request.get_type();
@@ -419,14 +427,18 @@ impl Vault {
                             .unwrap_or_else(Default::default);
 
                         if !auth_keys.contains_key(&requester_pk) {
-                            return Err(SndError::AccessDenied);
+                            return Err(SndError::AccessDenied(
+                                "Permission denied app is not authorised".to_string(),
+                            ));
                         }
                     }
 
                     // Verify signature if the request is not a GET for public data.
                     match signature {
                         Some(sig) => verify_signature(&sig, &requester_pk, &request, &message_id)?,
-                        None => return Err(SndError::InvalidSignature),
+                        None => {
+                            return Err(SndError::AccessDenied("Invalid app signature".to_string()))
+                        }
                     }
 
                     if is_app {
@@ -435,22 +447,17 @@ impl Vault {
                         // verify we have a token, if not access denied
                         let the_token = match token {
                             Some(a_token) => a_token,
-                            None => return Err(SndError::AccessDenied),
+                            None => {
+                                return Err(SndError::AccessDenied("Missing Token".to_string()))
+                            }
                         };
 
                         trace!("Processing req of App w/ token {:?}", the_token);
 
                         // Verify the token now we know it's not a public data GET
-                        let token_is_signed_and_valid =
-                            match the_token.is_valid_for_public_key(&owner_pk) {
-                                Ok(validity) => validity,
-                                _ => return Err(SndError::InvalidToken),
-                            };
-                        trace!("The token is valid? {:?}", token_is_signed_and_valid);
+                        let is_valid = the_token.is_valid_for_public_key(&owner_pk)?;
 
-                        if !token_is_signed_and_valid {
-                            return Err(SndError::AccessDenied);
-                        }
+                        trace!("The token is signed and valid, {:?}", is_valid);
                     }
                 }
                 RequestType::PublicGet => (),
@@ -482,7 +489,7 @@ impl Vault {
                         if *data.owner() == requester_pk {
                             Ok(idata)
                         } else {
-                            Err(SndError::AccessDenied)
+                            Err(SndError::AccessDenied("Not the owner".to_string()))
                         }
                     }
                     IData::Pub(_) => Ok(idata),
@@ -516,7 +523,7 @@ impl Vault {
             Request::ListAuthKeysAndVersion => {
                 let result = {
                     if owner_pk != requester_pk {
-                        Err(SndError::AccessDenied)
+                        Err(SndError::AccessDenied("Not the owner".to_string()))
                     } else {
                         Ok(self.list_auth_keys_and_version(&requester.name()))
                     }
@@ -529,7 +536,7 @@ impl Vault {
                 version,
             } => {
                 let result = if owner_pk != requester_pk {
-                    Err(SndError::AccessDenied)
+                    Err(SndError::AccessDenied("Not the owner".to_string()))
                 } else {
                     self.ins_auth_key(&requester.name(), key, permissions, version)
                 };
@@ -537,7 +544,7 @@ impl Vault {
             }
             Request::DelAuthKey { key, version } => {
                 let result = if owner_pk != requester_pk {
-                    Err(SndError::AccessDenied)
+                    Err(SndError::AccessDenied("Not the owner".to_string()))
                 } else {
                     self.del_auth_key(&requester.name(), key, version)
                 };
@@ -699,7 +706,7 @@ impl Vault {
                                 login_packet.signature().clone(),
                             ))
                         } else {
-                            Err(SndError::AccessDenied)
+                            Err(SndError::AccessDenied("Not the owner".to_string()))
                         }
                     }
                 };
@@ -713,7 +720,7 @@ impl Vault {
                                 self.insert_login_packet(new_packet);
                                 Ok(())
                             } else {
-                                Err(SndError::AccessDenied)
+                                Err(SndError::AccessDenied("Not the owner".to_string()))
                             }
                         }
                         None => Err(SndError::NoSuchLoginPacket),
@@ -846,7 +853,7 @@ impl Vault {
                                 Err(SndError::InvalidOwners)
                             }
                         } else {
-                            Err(SndError::AccessDenied)
+                            Err(SndError::AccessDenied("Not the owner".to_string()))
                         }
                     });
                 Response::Mutation(result)
@@ -1141,7 +1148,7 @@ impl Vault {
                             }
                             _ => Err(SndError::NoSuchData),
                         },
-                        _ => Err(SndError::AccessDenied),
+                        _ => Err(SndError::AccessDenied("Permission denied".to_string())),
                     });
                 Response::Mutation(result)
             }
@@ -1172,7 +1179,7 @@ impl Vault {
                             }
                             _ => Err(SndError::NoSuchData),
                         },
-                        _ => Err(SndError::AccessDenied),
+                        _ => Err(SndError::AccessDenied("Permission denied".to_string())),
                     });
                 Response::Mutation(result)
             }
@@ -1277,7 +1284,7 @@ impl Vault {
                             self.delete_data(data_id);
                             Ok(())
                         } else {
-                            Err(SndError::AccessDenied)
+                            Err(SndError::AccessDenied("Not the owner".to_string()))
                         }
                     } else {
                         Err(SndError::InvalidOperation)
@@ -1338,7 +1345,7 @@ impl Vault {
             PublicId::App(app_public_id) => {
                 (*app_public_id.owner_name(), *app_public_id.public_key())
             }
-            _ => return Err(SndError::AccessDenied),
+            _ => return Err(SndError::AccessDenied("Permission denied".to_string())),
         };
         self.authorise_operations(&[Operation::Mutation], name, key)?;
         if self.contains_data(&data_name) {

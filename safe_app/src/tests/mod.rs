@@ -320,7 +320,7 @@ fn unregistered_client() {
                     .get_adata(ADataAddress::UnpubUnseq { name: addr, tag })
                     .then(|res| {
                         match res {
-                            Err(CoreError::DataError(SndError::AccessDenied)) => (),
+                            Err(CoreError::DataError(SndError::AccessDenied(_))) => (),
                             res => panic!("Unexpected result {:?}", res),
                         }
                         Ok(())
@@ -340,7 +340,7 @@ fn unregistered_client_put() {
     // Unregistered Client should not be able to PUT data.
     unwrap!(run(&app, move |client, _context| {
         client.put_idata(pub_idata).then(move |res| match res {
-            Err(CoreError::DataError(SndError::AccessDenied)) => Ok(()),
+            Err(CoreError::DataError(SndError::AccessDenied(_))) => Ok(()),
             Ok(()) => panic!("Unexpected Success"),
             Err(e) => panic!("Unexpected Error: {}", e),
         })

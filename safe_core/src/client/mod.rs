@@ -1998,7 +1998,7 @@ mod tests {
         random_client(move |client| {
             client.delete_mdata(mdataref).then(|res| {
                 match res {
-                    Err(CoreError::DataError(SndError::AccessDenied)) => (),
+                    Err(CoreError::DataError(SndError::AccessDenied(_))) => (),
                     res => panic!("Unexpected result: {:?}", res),
                 }
                 Ok::<_, SndError>(())

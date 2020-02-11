@@ -165,7 +165,7 @@ fn managing_permissions_for_an_app() {
                 })
                 .then(move |res| {
                     match res {
-                        Err(CoreError::DataError(SndError::AccessDenied)) => (),
+                        Err(CoreError::DataError(SndError::AccessDenied(_))) => (),
                         res => panic!("{:?}: Unexpected result: {:?}", variant, res),
                     }
                     // Signal the client to allow access to the data
@@ -390,7 +390,7 @@ fn restricted_access_and_deletion() {
                             assert_eq!(*data.address(), address);
                             assert_eq!(data.entries_index(), 3);
                         }
-                        (Err(CoreError::DataError(SndError::AccessDenied)), false) => {}
+                        (Err(CoreError::DataError(SndError::AccessDenied(_))), false) => {}
                         (res, _) => panic!("{:?}: Unexpected result: {:?}", variant, res),
                     }
                     // Send the app's key so it can be authenticated and granted access to the data
@@ -432,7 +432,7 @@ fn restricted_access_and_deletion() {
                 })
                 .then(move |res| {
                     match res {
-                        Err(CoreError::DataError(SndError::AccessDenied)) => (),
+                        Err(CoreError::DataError(SndError::AccessDenied(_))) => (),
                         res => panic!("{:?}: Unexpected result: {:?}", variant, res),
                     }
                     client5.get_adata(address)
@@ -440,7 +440,7 @@ fn restricted_access_and_deletion() {
                 .then(move |res| {
                     match (res, address.is_pub()) {
                         (Ok(data), true) => assert_eq!(*data.address(), address),
-                        (Err(CoreError::DataError(SndError::AccessDenied)), false) => {}
+                        (Err(CoreError::DataError(SndError::AccessDenied(_))), false) => {}
                         (res, _) => panic!("{:?}: Unexpected result: {:?}", variant, res),
                     }
                     unwrap!(finish_tx.send(()));
@@ -644,7 +644,7 @@ fn public_permissions_with_app_restrictions() {
                 })
                 .then(move |res| {
                     match res {
-                        Err(CoreError::DataError(SndError::AccessDenied)) => (),
+                        Err(CoreError::DataError(SndError::AccessDenied(_))) => (),
                         res => panic!("{:?}: Unexpected result: {:?}", variant, res),
                     }
                     let permissions = BTreeMap::new();
@@ -660,7 +660,7 @@ fn public_permissions_with_app_restrictions() {
                 })
                 .then(move |res| {
                     match res {
-                        Err(CoreError::DataError(SndError::AccessDenied)) => (),
+                        Err(CoreError::DataError(SndError::AccessDenied(_))) => (),
                         res => panic!("{:?}: Unexpected result: {:?}", variant, res),
                     }
                     client6.get_adata(address)

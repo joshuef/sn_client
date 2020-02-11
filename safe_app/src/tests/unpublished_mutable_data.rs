@@ -56,7 +56,7 @@ fn md_created_by_app_1() {
             .then(move |res| {
                 match res {
                     Ok(()) => panic!("It should fail"),
-                    Err(CoreError::DataError(Error::AccessDenied)) => (),
+                    Err(CoreError::DataError(Error::AccessDenied(_))) => (),
                     Err(x) => panic!("Expected Error::AccessDenied. Got {:?}", x),
                 }
                 let user = bls_pk;
@@ -74,7 +74,7 @@ fn md_created_by_app_1() {
             .then(move |res| -> Result<_, ()> {
                 match res {
                     Ok(()) => panic!("It should fail"),
-                    Err(CoreError::DataError(Error::AccessDenied)) => (),
+                    Err(CoreError::DataError(Error::AccessDenied(_))) => (),
                     Err(x) => panic!("Expected Error::AccessDenied. Got {:?}", x),
                 }
                 unwrap!(tx.send(()));
@@ -161,7 +161,7 @@ fn md_created_by_app_2() {
             .then(move |res| {
                 match res {
                     Ok(()) => panic!("It should fail"),
-                    Err(CoreError::DataError(Error::AccessDenied)) => (),
+                    Err(CoreError::DataError(Error::AccessDenied(_))) => (),
                     Err(x) => panic!("Expected Error::AccessDenied. Got {:?}", x),
                 }
                 let entry_actions =
@@ -171,7 +171,7 @@ fn md_created_by_app_2() {
             .then(move |res| {
                 match res {
                     Ok(()) => panic!("It should fail"),
-                    Err(CoreError::DataError(Error::AccessDenied)) => (),
+                    Err(CoreError::DataError(Error::AccessDenied(_))) => (),
                     Err(x) => panic!("Expected Error::AccessDenied. Got {:?}", x),
                 }
                 let user = app_pk;
@@ -203,7 +203,7 @@ fn md_created_by_app_2() {
             .then(move |res| {
                 match res {
                     Ok(()) => panic!("It should fail"),
-                    Err(CoreError::DataError(Error::AccessDenied)) => (),
+                    Err(CoreError::DataError(Error::AccessDenied(_))) => (),
                     Err(x) => panic!("Expected Error::AccessDenied. Got {:?}", x),
                 }
                 let entry_actions = MDataUnseqEntryActions::new().del(vec![1, 2, 3, 4]);
@@ -403,7 +403,7 @@ fn multiple_apps() {
             .then(move |res| -> Result<_, ()> {
                 match res {
                     Ok(()) => panic!("It should fail"),
-                    Err(CoreError::DataError(Error::AccessDenied)) => (),
+                    Err(CoreError::DataError(Error::AccessDenied(_))) => (),
                     Err(x) => panic!("Expected Error::AccessDenied. Got {:?}", x),
                 }
                 unwrap!(final_check_tx.send(()));

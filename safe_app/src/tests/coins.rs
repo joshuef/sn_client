@@ -42,7 +42,7 @@ fn coin_app_deny_permissions() {
             .get_balance(None)
             .then(move |res| {
                 match res {
-                    Err(CoreError::DataError(Error::AccessDenied)) => (),
+                    Err(CoreError::DataError(Error::AccessDenied(_))) => (),
                     res => panic!("Unexpected result: {:?}", res),
                 }
 
@@ -50,7 +50,7 @@ fn coin_app_deny_permissions() {
             })
             .then(move |res| {
                 match res {
-                    Err(CoreError::DataError(Error::AccessDenied)) => (),
+                    Err(CoreError::DataError(Error::AccessDenied(_))) => (),
                     res => panic!("Unexpected result: {:?}", res),
                 }
                 Ok::<_, AppError>(())

@@ -1832,7 +1832,7 @@ checksum = "bfa8506c1de11c9c4e4c38863ccbe02a305c8188e85a05a784c9e11e1c3910c8"
 [[package]]
 name = "safe-nd"
 version = "0.7.2"
-source = "git+https://github.com/joshuef/safe-nd.git?rev=6c4509b07472232487bf12ab17476277d0efcfb0#6c4509b07472232487bf12ab17476277d0efcfb0"
+source = "git+https://github.com/joshuef/safe-nd.git?rev=98e1821708cc#98e1821708cc3be05b3c3d3e386d6b5890a8596b"
 dependencies = [
  "bincode",
  "data-encoding",

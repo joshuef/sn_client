@@ -916,9 +916,9 @@ fn mutable_data_permissions() {
 
     // Revoke all permissions from app.
     send_req_expect_ok!(
-        &mut app_connection_manager,
+        &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         Request::DelMDataUserPermissions {
             address,
             user: app_safe_key.public_key(),
@@ -1355,11 +1355,11 @@ fn auth_actions_from_app() {
 
     let address = *data.address();
 
-    // Upload MData for testing
+    // Upload MData for testing as client
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         Request::PutMData(data.clone()),
         ()
     );
@@ -1368,7 +1368,7 @@ fn auth_actions_from_app() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         Request::GetMData(address),
         data
     );
@@ -1456,7 +1456,6 @@ fn low_balance_check() {
                 new_balance_owner,
                 amount: unwrap!(balance.checked_sub(*COST_OF_PUT)),
                 transaction_id: rand::random(),
-                //                token: Some( test_generate_signed_token(client_safe_key.clone()) )
             },
         );
 

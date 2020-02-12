@@ -746,7 +746,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         Request::MutateMDataEntries {
             address,
             actions: actions.into()
@@ -755,7 +755,7 @@ fn mutable_data_permissions() {
     );
 
     // Create app and authorise it.
-    let (app_safe_key, mut connection_manager2, _) = test_register_new_app(
+    let (app_safe_key, mut app_connection_manager, _) = test_register_new_app(
         &mut connection_manager,
         &client_safe_key,
         AppPermissions {
@@ -773,7 +773,7 @@ fn mutable_data_permissions() {
         actions: actions.into(),
     };
     send_req_expect_access_denied!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         mutation_request.clone(),
@@ -791,7 +791,7 @@ fn mutable_data_permissions() {
         version: 1,
     };
     send_req_expect_access_denied!(
-        &mut connection_manager,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         update_perms_req.clone(),
@@ -801,7 +801,7 @@ fn mutable_data_permissions() {
     // Verify app still can't update, after the previous attempt to
     // modify its permissions.
     send_req_expect_access_denied!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         mutation_request.clone(),
@@ -812,7 +812,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         update_perms_req,
         ()
     );
@@ -843,7 +843,7 @@ fn mutable_data_permissions() {
         actions: actions.into(),
     };
     send_req_expect_access_denied!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         insertion_request.clone(),
@@ -860,7 +860,7 @@ fn mutable_data_permissions() {
     .into();
 
     send_req_expect_ok!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         Request::MutateMDataEntries {
@@ -885,7 +885,7 @@ fn mutable_data_permissions() {
     send_req_expect_failure!(
         &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         invalid_update_perms_req,
         error
     );
@@ -900,14 +900,14 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         valid_update_perms_req,
         ()
     );
 
     // App can now update entries.
     send_req_expect_ok!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         insertion_request,
@@ -916,7 +916,7 @@ fn mutable_data_permissions() {
 
     // Revoke all permissions from app.
     send_req_expect_ok!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &client_safe_key,
         token_signed_by_client.clone(),
         Request::DelMDataUserPermissions {
@@ -929,7 +929,7 @@ fn mutable_data_permissions() {
 
     // App can no longer mutate the entries.
     send_req_expect_access_denied!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         mutation_request.clone(),
@@ -941,7 +941,7 @@ fn mutable_data_permissions() {
     send_req_expect_ok!(
         &mut connection_manager,
         &client_safe_key,
-        token_signed_by_client.clone(),
+        None,
         Request::SetMDataUserPermissions {
             address,
             user: app_safe_key.public_key(),
@@ -953,7 +953,7 @@ fn mutable_data_permissions() {
 
     // The app still can't mutate the entries.
     send_req_expect_access_denied!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         mutation_request,
@@ -963,7 +963,7 @@ fn mutable_data_permissions() {
     // App can modify its own permission.
     let permissions = MDataPermissionSet::new().allow(MDataAction::Update);
     send_req_expect_ok!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client.clone(),
         Request::SetMDataUserPermissions {
@@ -979,7 +979,7 @@ fn mutable_data_permissions() {
     let value1_v1 = unwrap!(utils::generate_random_vector(10));
     let actions = MDataSeqEntryActions::new().update(key1.to_vec(), value1_v1, 1);
     send_req_expect_ok!(
-        &mut connection_manager2,
+        &mut app_connection_manager,
         &app_safe_key,
         token_signed_by_client,
         Request::MutateMDataEntries {

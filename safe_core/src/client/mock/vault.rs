@@ -550,17 +550,17 @@ impl Vault {
                 Response::Mutation(result)
             }
             // ===== Client (Owner) to SrcElders =====
-            Request::ListAuthKeysAndVersion => {
+            Request::ListAppCredentialsAndVersion => {
                 let result = {
                     if owner_pk != requester_pk {
                         Err(SndError::AccessDenied("Not the owner".to_string()))
                     } else {
-                        Ok(self.list_auth_keys_and_version(&requester.name()))
+                        Ok(self.list_app_credentials_and_version(&requester.name()))
                     }
                 };
-                Response::ListAuthKeysAndVersion(result)
+                Response::ListAppCredentialsAndVersion(result)
             }
-            Request::InsAuthKey {
+            Request::InsAppCredentials {
                 key,
                 token,
                 version,
@@ -569,18 +569,18 @@ impl Vault {
                     Err(SndError::AccessDenied("Not the owner".to_string()))
                 } else {
                     let serialized_token = serialize(&token).map_err(|_| {
-                        SndError::FailedToParse("Error serializing caveats".to_string())
+                        SndError::FailedToParse("Error serializing token".to_string())
                     })?;
                     let hash = tiny_keccak::sha3_256(serialized_token.as_slice());
-                    self.ins_auth_key(&requester.name(), key, &hash, version)
+                    self.ins_app_credentials(&requester.name(), key, &hash, version)
                 };
                 Response::Mutation(result)
             }
-            Request::DelAuthKey { key, version } => {
+            Request::DelAppCredentials { key, version } => {
                 let result = if owner_pk != requester_pk {
                     Err(SndError::AccessDenied("Not the owner".to_string()))
                 } else {
-                    self.del_auth_key(&requester.name(), key, version)
+                    self.del_app_credentials(&requester.name(), key, version)
                 };
                 Response::Mutation(result)
             }
@@ -1413,7 +1413,7 @@ impl Vault {
         }
     }
 
-    fn list_auth_keys_and_version(
+    fn list_app_credentials_and_version(
         &mut self,
         name: &XorName,
     ) -> (BTreeMap<PublicKey, [u8; 32]>, u64) {
@@ -1425,7 +1425,7 @@ impl Vault {
         (account.auth_keys().clone(), account.version())
     }
 
-    fn ins_auth_key(
+    fn ins_app_credentials(
         &mut self,
         name: &XorName,
         key: PublicKey,
@@ -1437,16 +1437,21 @@ impl Vault {
         }
         let account = unwrap!(self.get_account_mut(&name));
 
-        account.ins_auth_key(key, permissions, version)
+        account.ins_app_credentials(key, permissions, version)
     }
 
-    fn del_auth_key(&mut self, name: &XorName, key: PublicKey, version: u64) -> SndResult<()> {
+    fn del_app_credentials(
+        &mut self,
+        name: &XorName,
+        key: PublicKey,
+        version: u64,
+    ) -> SndResult<()> {
         if self.get_account(&name).is_none() {
             self.insert_account(*name);
         }
         let account = unwrap!(self.get_account_mut(&name));
 
-        account.del_auth_key(&key, version)
+        account.del_app_credentials(&key, version)
     }
 }
 

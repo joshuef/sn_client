@@ -295,9 +295,9 @@ fn managing_permissions_for_an_app() {
                 }
 
                 client
-                    .list_auth_keys_and_version()
+                    .list_app_credentials_and_version()
                     .and_then(move |(_, version)| {
-                        client2.ins_auth_key(app_pk, Default::default(), version + 1)
+                        client2.ins_app_credentials(app_pk, Default::default(), version + 1)
                     })
                     .and_then(move |()| client3.put_adata(adata))
                     .and_then(move |()| {
@@ -484,12 +484,12 @@ fn restricted_access_and_deletion() {
                     .and_then(move |()| {
                         // Send the address of the data on the network
                         unwrap!(address_tx.send(address));
-                        client2.list_auth_keys_and_version()
+                        client2.list_app_credentials_and_version()
                     })
                     .and_then(move |(_, version)| {
                         let app_key: PublicKey = unwrap!(app_key_rx.recv());
                         client3
-                            .ins_auth_key(app_key, token, version + 1)
+                            .ins_app_credentials(app_key, token, version + 1)
                             .map(move |()| (app_key, version + 1))
                     })
                     .and_then(move |(key, version)| {
@@ -529,7 +529,7 @@ fn restricted_access_and_deletion() {
                         unwrap!(app_authed_tx.send(()));
                         // Wait for the signal to revoke the app
                         unwrap!(revoke_app_rx.recv());
-                        client5.del_auth_key(key, version + 1)
+                        client5.del_app_credentials(key, version + 1)
                     })
                     .and_then(move |()| {
                         // Signal that the app is revoked

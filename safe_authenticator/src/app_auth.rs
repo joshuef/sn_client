@@ -282,10 +282,10 @@ fn authenticated_app(
                     config::insert_app(&c5, apps.1, config::next_version(apps.0), app)
                 })
                 .and_then(move |_| {
-                    c4.list_auth_keys_and_version()
+                    c4.list_app_credentials_and_version()
                         .map_err(AuthError::from)
                         .and_then(move |(_, version)| {
-                            recoverable_apis::ins_auth_key_to_client_h(
+                            recoverable_apis::ins_app_credentials_to_client_h(
                                 &c6,
                                 app_pk,
                                 permissions.0.clone(),
@@ -343,9 +343,9 @@ fn authenticate_new_app(
     let app_id = app.info.id.clone();
 
     client
-        .list_auth_keys_and_version()
+        .list_app_credentials_and_version()
         .and_then(move |(_, version)| {
-            recoverable_apis::ins_auth_key_to_client_h(
+            recoverable_apis::ins_app_credentials_to_client_h(
                 &c2,
                 app_keys.public_key(),
                 token.clone(),

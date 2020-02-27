@@ -300,7 +300,7 @@ fn union_permission_sets(a: MDataPermissionSet, b: MDataPermissionSet) -> MDataP
 
 /// Insert key to Client Handler.
 /// Covers the `InvalidSuccessor` error case (it should not fail if the key already exists).
-pub fn ins_auth_key_to_client_h(
+pub fn ins_app_credentials_to_client_h(
     client: &(impl Client + AuthActions),
     key: PublicKey,
     permissions: AuthToken,
@@ -311,7 +311,7 @@ pub fn ins_auth_key_to_client_h(
 
     future::loop_fn(state, move |(attempts, version)| {
         client
-            .ins_auth_key(key, permissions.clone(), version)
+            .ins_app_credentials(key, permissions.clone(), version)
             .map(|_| Loop::Break(()))
             .or_else(move |error| match error {
                 CoreError::DataError(SndError::InvalidSuccessor(current_version)) => {

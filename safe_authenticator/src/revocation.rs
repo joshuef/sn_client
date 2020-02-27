@@ -166,10 +166,10 @@ fn delete_app_auth_key(client: &AuthClient, key: PublicKey) -> Box<AuthFuture<()
     let client = client.clone();
 
     client
-        .list_auth_keys_and_version()
+        .list_app_credentials_and_version()
         .and_then(move |(listed_keys, version)| {
             if listed_keys.contains_key(&key) {
-                client.del_auth_key(key, version + 1)
+                client.del_app_credentials(key, version + 1)
             } else {
                 // The key has been removed already
                 ok!(())

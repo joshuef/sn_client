@@ -1186,7 +1186,7 @@ fn auth_keys() {
         &mut connection_manager,
         &client_safe_key,
         None,
-        Request::ListAuthKeysAndVersion,
+        Request::ListAppCredentialsAndVersion,
     );
     let (keys, version): (BTreeMap<_, _>, u64) = unwrap!(response.try_into());
     assert_eq!(keys.len(), 0);
@@ -1196,7 +1196,7 @@ fn auth_keys() {
 
     let token = test_generate_signed_token(client_safe_key.clone());
     // Attempt to insert auth key without proper version bump fails.
-    let test_ins_auth_key_req = Request::InsAuthKey {
+    let test_ins_app_credentials_req = Request::InsAppCredentials {
         key: app_key,
         version: 0,
         token: token.clone(),
@@ -1208,12 +1208,12 @@ fn auth_keys() {
         &mut connection_manager,
         &client_safe_key,
         None,
-        test_ins_auth_key_req,
+        test_ins_app_credentials_req,
         error
     );
 
     // Insert an auth key with proper version bump succeeds.
-    let ins_auth_key_req = Request::InsAuthKey {
+    let ins_app_credentials_req = Request::InsAppCredentials {
         key: app_key,
         version: 1,
         token,
@@ -1223,7 +1223,7 @@ fn auth_keys() {
         &mut connection_manager,
         &client_safe_key,
         None,
-        ins_auth_key_req,
+        ins_app_credentials_req,
         ()
     );
 
@@ -1231,11 +1231,11 @@ fn auth_keys() {
         &mut connection_manager,
         &client_safe_key,
         None,
-        Request::ListAuthKeysAndVersion,
+        Request::ListAppCredentialsAndVersion,
     );
 
     match response {
-        Response::ListAuthKeysAndVersion(res) => match res {
+        Response::ListAppCredentialsAndVersion(res) => match res {
             Ok(keys) => {
                 assert!(keys.0.get(&app_key).is_some());
                 assert_eq!(keys.1, 1);
@@ -1246,7 +1246,7 @@ fn auth_keys() {
     }
 
     // Attempt to delete auth key without proper version bump fails.
-    let test_del_auth_key_req = Request::DelAuthKey {
+    let test_del_app_credentials_req = Request::DelAppCredentials {
         key: app_key,
         version: 0,
     };
@@ -1257,14 +1257,14 @@ fn auth_keys() {
         &mut connection_manager,
         &client_safe_key,
         None,
-        test_del_auth_key_req,
+        test_del_app_credentials_req,
         error
     );
 
     // Attempt to delete non-existing key fails.
     let test_auth_key = PublicKey::from(SecretKey::random().public_key());
 
-    let test1_del_auth_key_req = Request::DelAuthKey {
+    let test1_del_app_credentials_req = Request::DelAppCredentials {
         key: test_auth_key,
         version: 2,
     };
@@ -1273,12 +1273,12 @@ fn auth_keys() {
         &mut connection_manager,
         &client_safe_key,
         None,
-        test1_del_auth_key_req,
+        test1_del_app_credentials_req,
         Error::NoSuchKey
     );
 
     // Delete auth key with proper version bump succeeds.
-    let del_auth_key_req = Request::DelAuthKey {
+    let del_app_credentials_req = Request::DelAppCredentials {
         key: app_key,
         version: 2,
     };
@@ -1287,7 +1287,7 @@ fn auth_keys() {
         &mut connection_manager,
         &client_safe_key,
         None,
-        del_auth_key_req,
+        del_app_credentials_req,
         ()
     );
 
@@ -1296,11 +1296,11 @@ fn auth_keys() {
         &mut connection_manager,
         &client_safe_key,
         None,
-        Request::ListAuthKeysAndVersion,
+        Request::ListAppCredentialsAndVersion,
     );
 
     match response {
-        Response::ListAuthKeysAndVersion(res) => match res {
+        Response::ListAppCredentialsAndVersion(res) => match res {
             Ok(keys) => {
                 assert_eq!(keys.0.len(), 0);
                 assert_eq!(keys.1, 2);
@@ -1373,7 +1373,7 @@ fn auth_actions_from_app() {
         &mut app_conn_manager,
         &app_key,
         Some(token_signed_by_client.clone()),
-        Request::ListAuthKeysAndVersion,
+        Request::ListAppCredentialsAndVersion,
         "Not the owner"
     );
 
@@ -1382,7 +1382,7 @@ fn auth_actions_from_app() {
         &mut app_conn_manager,
         &app_key,
         Some(token_signed_by_client),
-        Request::DelAuthKey {
+        Request::DelAppCredentials {
             key: app_key.public_key(),
             version: 1,
         },
@@ -1707,7 +1707,7 @@ fn test_register_new_app(
         conn_manager,
         client_safe_key,
         None,
-        Request::ListAuthKeysAndVersion,
+        Request::ListAppCredentialsAndVersion,
     );
     let (_, version): (_, u64) = unwrap!(response.try_into());
 
@@ -1716,7 +1716,7 @@ fn test_register_new_app(
         conn_manager,
         client_safe_key,
         None,
-        Request::InsAuthKey {
+        Request::InsAppCredentials {
             key: *app_full_id.public_id().public_key(),
             version: version + 1,
             token: token.clone(),

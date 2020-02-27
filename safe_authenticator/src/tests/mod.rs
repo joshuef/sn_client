@@ -178,7 +178,7 @@ mod mock_routing {
     //    container)
     // 3. Try to authenticate the app again, it should continue without errors
     //
-    // 4. Simulate a network failure after the `ins_auth_key` operation.
+    // 4. Simulate a network failure after the `ins_app_credentials` operation.
     //    The authentication op should fail.
     // 5. Try to authenticate the app again, it should continue without errors
     //
@@ -212,7 +212,7 @@ mod mock_routing {
                     // Simulate a network failure after
                     // the `mutate_mdata_entries` operation (relating to
                     // the addition of the app to the user's config dir)
-                    Request::InsAuthKey { .. } => {
+                    Request::InsAppCredentials { .. } => {
                         Some(Response::Mutation(Err(SndError::InsufficientBalance)))
                     }
                     // Pass-through
@@ -591,7 +591,7 @@ fn app_authentication() {
     // Check the app is authorised.
     let auth_keys = unwrap!(run(&authenticator, |client| {
         client
-            .list_auth_keys_and_version()
+            .list_app_credentials_and_version()
             .map(|(keys, _)| keys)
             .map_err(AuthError::from)
     }));

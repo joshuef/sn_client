@@ -52,7 +52,7 @@ pub fn app_tokens_test() {
 
     let app_permissions1 = AppPermissions {
         transfer_coins: true,
-        perform_mutations: true,
+        perform_mutations: false,
         get_balance: true,
     };
 
@@ -81,7 +81,7 @@ pub fn app_tokens_test() {
             .is_ok());
 
         assert!(old_token
-            .verify_caveat(PERFORM_MUTATIONS, |content| content == "true")
+            .verify_caveat(PERFORM_MUTATIONS, |content| content == "false")
             .is_ok());
 
         assert!(old_token
@@ -108,9 +108,9 @@ pub fn app_tokens_test() {
 
     // Re-authenticate the app with new permissions
     let app_permissions2 = AppPermissions {
-        transfer_coins: false,
-        perform_mutations: false,
-        get_balance: false,
+        transfer_coins: true,
+        perform_mutations: true,
+        get_balance: true,
     };
 
     let auth_response_new = unwrap!(authenticator::register_app(
@@ -128,7 +128,7 @@ pub fn app_tokens_test() {
     let app_new = unwrap!(App::registered(app_info.id, auth_response_new, || ()));
 
     // Send GetBalance request to check from old app instance holding the old token - should fail
-    // as the token is now updated at CH.
+    // as the token is now updated at CH and the hash differs.
     unwrap!(run(&app, move |client, _| {
         client
             .get_balance(None)
@@ -143,18 +143,17 @@ pub fn app_tokens_test() {
             })
     }));
 
-    // Send GetBalance request from new app instance holding the new token - should fail
-    // as permissions are denied.
+    // Send GetBalance request from new app instance holding the new token - should pass
+    // as permissions are allowed.
     unwrap!(run(&app_new, move |client, _| {
-    let token = unwrap!(client.token());
-    assert_eq!(new_token, token);
+        let token = unwrap!(client.token());
+        assert_eq!(new_token, token);
         client
             .get_balance(None)
             .map_err(AppError::from)
             .then(move |res| {
                 match res {
-                    Ok(s) => panic!("Unexpected Success: {:?}", s),
-                    Err(AppError::CoreError(CoreError::DataError(SndError::AccessDenied(_)))) => (),
+                    Ok(_) => (),
                     Err(e) => panic!("Unexpected Error: {:?}", e),
                 }
                 Ok(())

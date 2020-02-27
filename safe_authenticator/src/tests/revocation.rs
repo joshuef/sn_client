@@ -47,7 +47,9 @@ fn verify_app_is_revoked(
 
     config::list_apps(client)
         .and_then(move |(_, apps)| {
-            let auth_keys = c0.list_auth_keys_and_version().map_err(AuthError::from);
+            let auth_keys = c0
+                .list_app_credentials_and_version()
+                .map_err(AuthError::from);
             let state = app_state(&c0, &apps, &app_id);
 
             let app_hash = sha3_256(app_id.as_bytes());
@@ -98,7 +100,7 @@ fn verify_app_is_authenticated(client: &AuthClient, app_id: String) -> Box<AuthF
             let app_hash = sha3_256(app_id.as_bytes());
             let app_keys = unwrap!(apps.remove(&app_hash)).keys;
 
-            c0.list_auth_keys_and_version()
+            c0.list_app_credentials_and_version()
                 .map_err(AuthError::from)
                 .map(move |(auth_keys, _)| (auth_keys, app_id, app_keys))
         })
@@ -249,7 +251,7 @@ mod mock_routing {
         // Ensure that the app key has been removed from MaidManagers
         let auth_keys = unwrap!(run(&auth, move |client| {
             client
-                .list_auth_keys_and_version()
+                .list_app_credentials_and_version()
                 .map(move |(auth_keys, _version)| auth_keys)
                 .map_err(AuthError::from)
         }));

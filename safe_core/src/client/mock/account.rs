@@ -92,7 +92,7 @@ impl Account {
 
     // Insert new auth key and bump the version. Returns false if the given version
     // is not one more than the current version.
-    pub fn ins_auth_key(
+    pub fn ins_app_credentials(
         &mut self,
         key: PublicKey,
         permissions: &[u8; 32],
@@ -107,7 +107,7 @@ impl Account {
 
     // Remove the auth key and bump the version. Returns false if the given version
     // is not one more than the current version.
-    pub fn del_auth_key(&mut self, key: &PublicKey, version: u64) -> Result<(), Error> {
+    pub fn del_app_credentials(&mut self, key: &PublicKey, version: u64) -> Result<(), Error> {
         self.validate_version(version)?;
 
         if self.auth_tokens.remove(key).is_some() {

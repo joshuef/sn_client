@@ -1242,24 +1242,31 @@ pub fn wallet_transfer_coins(
 pub trait AuthActions: Client + Clone + 'static {
     /// Fetches a list of authorised keys and version.
     #[allow(clippy::type_complexity)]
-    fn list_auth_keys_and_version(&self) -> Box<CoreFuture<(BTreeMap<PublicKey, [u8; 32]>, u64)>> {
-        trace!("ListAuthKeysAndVersion");
+    fn list_app_credentials_and_version(
+        &self,
+    ) -> Box<CoreFuture<(BTreeMap<PublicKey, [u8; 32]>, u64)>> {
+        trace!("ListAppCredentialsAndVersion");
 
-        send(self, Request::ListAuthKeysAndVersion)
+        send(self, Request::ListAppCredentialsAndVersion)
             .and_then(|res| match res {
-                Response::ListAuthKeysAndVersion(res) => res.map_err(CoreError::from),
+                Response::ListAppCredentialsAndVersion(res) => res.map_err(CoreError::from),
                 _ => Err(CoreError::ReceivedUnexpectedEvent),
             })
             .into_box()
     }
 
     /// Adds a new authorised key.
-    fn ins_auth_key(&self, key: PublicKey, token: AuthToken, version: u64) -> Box<CoreFuture<()>> {
-        trace!("InsAuthKey ({:?})", key);
+    fn ins_app_credentials(
+        &self,
+        key: PublicKey,
+        token: AuthToken,
+        version: u64,
+    ) -> Box<CoreFuture<()>> {
+        trace!("InsAppCredentials ({:?})", key);
 
         send_mutation(
             self,
-            Request::InsAuthKey {
+            Request::InsAppCredentials {
                 key,
                 token,
                 version,
@@ -1268,10 +1275,10 @@ pub trait AuthActions: Client + Clone + 'static {
     }
 
     /// Removes an authorised key.
-    fn del_auth_key(&self, key: PublicKey, version: u64) -> Box<CoreFuture<()>> {
-        trace!("DelAuthKey ({:?})", key);
+    fn del_app_credentials(&self, key: PublicKey, version: u64) -> Box<CoreFuture<()>> {
+        trace!("DelAppCredentials ({:?})", key);
 
-        send_mutation(self, Request::DelAuthKey { key, version })
+        send_mutation(self, Request::DelAppCredentials { key, version })
     }
 
     /// Delete MData from network

@@ -111,10 +111,10 @@ fn md_created_by_app_1() {
                 let c3 = client.clone();
 
                 client
-                    .list_auth_keys_and_version()
+                    .list_app_credentials_and_version()
                     .then(move |res| {
                         let (_, version) = unwrap!(res);
-                        cl2.ins_auth_key(app_pk, Default::default(), version + 1)
+                        cl2.ins_app_credentials(app_pk, Default::default(), version + 1)
                     })
                     .then(move |res| {
                         unwrap!(res);
@@ -243,10 +243,10 @@ fn md_created_by_app_2() {
                 let c3 = client.clone();
 
                 client
-                    .list_auth_keys_and_version()
+                    .list_app_credentials_and_version()
                     .then(move |res| {
                         let (_, version) = unwrap!(res);
-                        cl2.ins_auth_key(app_pk, Default::default(), version + 1)
+                        cl2.ins_app_credentials(app_pk, Default::default(), version + 1)
                     })
                     .then(move |res| {
                         unwrap!(res);

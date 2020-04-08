@@ -37,6 +37,9 @@ use unwrap::unwrap;
 /// Request timeout in seconds.
 pub const REQUEST_TIMEOUT_SECS: u64 = 180;
 
+// need CvRDT import for merge functionality
+use safe_nd::CvRDT;
+
 lazy_static! {
     static ref GROUP_COUNTER: AtomicU64 = AtomicU64::new(0);
 }
@@ -270,30 +273,38 @@ impl Joining {
 
 struct Connected {
     elders: HashMap<SocketAddr, Elder>,
-    hook_manager: ConnectedHookManager, 
+    hook_manager: ConnectedHookManager,
 }
 
+type ResponseRequiredCount = usize;
 struct ConnectedHookManager {
-    hooks: HashMap<MessageId, (Sender<Response>, usize)>, 
+    /// MessageId to send_future channel map
+    hooks: HashMap<MessageId, (Sender<Response>, ResponseRequiredCount)>,
+    /// Store prior responses anagainst MessageId
+    prior_responses: HashMap<MessageId, Response>,
 }
 
 /// Manage hooks and their responses
 /// Separated out to make this easier to test.
 impl ConnectedHookManager {
     pub fn new() -> Self {
-
-        Self{
-            hooks: Default::default()
+        Self {
+            hooks: Default::default(),
+            prior_responses: Default::default(),
         }
     }
 
-    fn await_responses(&mut self, msg_id : MessageId, value: (Sender<Response>, usize) ) -> Result<(), String> {
-        let _ = self.hooks.insert(msg_id, value );
+    fn await_responses(
+        &mut self,
+        msg_id: MessageId,
+        value: (Sender<Response>, ResponseRequiredCount),
+    ) -> Result<(), String> {
+        let _ = self.hooks.insert(msg_id, value);
         Ok(())
     }
 
-     /// Handle a response from one of the elders.
-     fn handle_response(&mut self, msg_id: MessageId, response: Response) {
+    /// Handle a response from one of the elders.
+    fn handle_response(&mut self, msg_id: MessageId, response: Response) {
         trace!(
             "Handling response for msg_id: {:?}, resp: {:?}",
             msg_id,
@@ -301,17 +312,58 @@ impl ConnectedHookManager {
         );
         let _ = self
             // here we remove
-            // and then insert with a lower count
-            // TODO: we need to merge CRDT messages.
             .hooks
             .remove(&msg_id)
             .map(|(sender, count)| {
+                let returnable_response = response.clone();
+                let merged_response = self.prior_responses.remove(&msg_id).map(|prior_response| {
+                    // now we merge a crdt type...
+                    let mut merging_crdt_type = match prior_response {
+                        safe_nd::Response::GetGSet(success) => success.unwrap(),
+                        _ => {
+                            // no prior crdt type data so lets bail for now
+                            return returnable_response;
+                        }
+                    };
+
+                    let updated_response = match &response {
+                        // merge process will likely have to be different per CRDT type
+                        safe_nd::Response::GetGSet(success) => {
+                            let current = success.as_ref().unwrap();
+
+                            let _ = merging_crdt_type.merge(current.clone());
+
+                            trace!(
+                                "on COUNT {:?}, merged response is now: {:?}",
+                                &count,
+                                &merging_crdt_type
+                            );
+                        }
+                        _ => {}
+                    };
+
+                    safe_nd::Response::GetGSet(Ok(merging_crdt_type.clone()))
+                });
+
+                // Drop the count before we re-add the responses to hooks
                 let count = count - 1;
+
                 if count == 0 {
-                    sender.send(response)
+                    if let Some(response_message) = merged_response {
+                        sender.send(response_message)
+                    } else {
+                        // we shouldn't see this
+                        sender.send(response)
+                    }
                 } else {
-                    // here do the merges
                     let _ = self.hooks.insert(msg_id, (sender, count));
+                    if let Some(response_message) = merged_response {
+                        // re add our new merged data as a priod response
+                        let _ = self.prior_responses.insert(msg_id, response_message);
+                    } else {
+                        // there are no prior responses, so lets add ours.
+                        let _ = self.prior_responses.insert(msg_id, response);
+                    }
                     Ok(())
                 }
             })
@@ -320,7 +372,6 @@ impl ConnectedHookManager {
                 None
             });
     }
-
 }
 
 impl Connected {
@@ -360,8 +411,9 @@ impl Connected {
             self.elders.len()
         };
 
-        // TODO: await responses for
-        let _ = self.hook_manager.await_responses(msg_id, (sender_future, expected_responses));
+        let _ = self
+            .hook_manager
+            .await_responses(msg_id, (sender_future, expected_responses));
 
         let bytes = Bytes::from(unwrap!(serialize(msg)));
         {
@@ -384,7 +436,6 @@ impl Connected {
         )
     }
 
-   
     fn handle_new_message(
         &mut self,
         _quic_p2p: &mut QuicP2p,
@@ -405,7 +456,7 @@ impl Connected {
                     response
                 );
                 self.hook_manager.handle_response(message_id, response)
-            },
+            }
             Ok(Message::Notification { notification }) => {
                 trace!("Got transaction notification: {:?}", notification);
             }
@@ -682,9 +733,6 @@ fn setup_quic_p2p_event_loop(
     })
 }
 
-
-
-
 #[test]
 fn connected_group_get_response_ok() -> Result<(), String> {
     let mut test_hook_manager = ConnectedHookManager::new();
@@ -698,25 +746,24 @@ fn connected_group_get_response_ok() -> Result<(), String> {
     // our pseudo data
     let immutable_data = safe_nd::PubImmutableData::new(vec![6]);
 
-    let response = safe_nd::Response::GetIData( Ok(safe_nd::IData::from( immutable_data ) ) );
+    let response = safe_nd::Response::GetIData(Ok(safe_nd::IData::from(immutable_data)));
 
     let _ = test_hook_manager.await_responses(message_id, (sender_future, expected_responses));
     let _ = test_hook_manager.handle_response(message_id, response.clone());
 
     response_future
-        .map( move |i| {
-                assert_eq!(&i, &response );
-            }).wait();
+        .map(move |i| {
+            assert_eq!(&i, &response);
+        })
+        .wait();
     Ok(())
-               
-
 }
 
 // basic test to ensure future response is being properly evaluated and our test fails for bad responses
 #[test]
 fn connected_group_get_response_fail_with_bad_data() -> Result<(), String> {
     let mut test_hook_manager = ConnectedHookManager::new();
- 
+
     // set up a message
     let message_id = safe_nd::MessageId::new();
 
@@ -729,16 +776,62 @@ fn connected_group_get_response_fail_with_bad_data() -> Result<(), String> {
     // our nonsense response we receive
     let immutable_data_bad = safe_nd::PubImmutableData::new(vec![7]);
 
-    let response = safe_nd::Response::GetIData( Ok(safe_nd::IData::from( immutable_data ) ) );
-    let bad_response = safe_nd::Response::GetIData( Ok(safe_nd::IData::from( immutable_data_bad ) ) );
+    let response = safe_nd::Response::GetIData(Ok(safe_nd::IData::from(immutable_data)));
+    let bad_response = safe_nd::Response::GetIData(Ok(safe_nd::IData::from(immutable_data_bad)));
 
     let _ = test_hook_manager.await_responses(message_id, (sender_future, expected_responses));
-    let _ = test_hook_manager.handle_response(message_id, bad_response );
+    let _ = test_hook_manager.handle_response(message_id, bad_response);
 
     response_future
-        .map( move |i| {
-                println!("got: {:?}", i);
-                assert_ne!(&i, &response );
-            }).wait();
+        .map(move |i| {
+            println!("got: {:?}", i);
+            assert_ne!(&i, &response);
+        })
+        .wait();
+    Ok(())
+}
+
+#[test]
+fn connected_group_crdt_get_response_ok() -> Result<(), String> {
+    use safe_nd::GSet;
+
+    let mut test_hook_manager = ConnectedHookManager::new();
+
+    // set up a message
+    let message_id = safe_nd::MessageId::new();
+
+    let (sender_future, response_future) = oneshot::channel();
+    let expected_responses = 3; // one per elder
+
+    // our GSet data example...
+    let mut gset_data = GSet::new();
+
+    // setup our second data source
+    let mut gset_data2 = gset_data.clone();
+
+    gset_data.insert("bacon".to_string());
+
+    gset_data2.insert("sandwhich".to_string());
+
+    let response = safe_nd::Response::GetGSet(Ok(gset_data));
+
+    let response2 = safe_nd::Response::GetGSet(Ok(gset_data2));
+
+    let _ = test_hook_manager.await_responses(message_id, (sender_future, expected_responses));
+
+    let _bacon = test_hook_manager.handle_response(message_id, response.clone());
+    let _bacon = test_hook_manager.handle_response(message_id, response);
+    let _sandwhich = test_hook_manager.handle_response(message_id, response2);
+
+    response_future
+        .map(move |i| {
+            let g_set = match &i {
+                safe_nd::Response::GetGSet(success) => success.as_ref().unwrap(),
+                _ => panic!("Unexpected non GSet response."),
+            };
+            assert!(&g_set.contains(&"bacon".to_string()));
+            assert!(&g_set.contains(&"sandwhich".to_string()));
+        })
+        .wait();
     Ok(())
 }

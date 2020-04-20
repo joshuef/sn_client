@@ -83,6 +83,12 @@ impl ConnectionManager {
             }
         }
 
+        when_chaotic_do!({
+            // drop some responses.
+            debug!("Chaos: Dropping message before send.")
+            return Box::New(Err(""));
+        });
+
         let msg: Message = {
             let writing = match msg {
                 Message::Request { request, .. } => {

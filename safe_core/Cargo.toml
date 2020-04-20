@@ -51,3 +51,4 @@ tempfile = "3.1.0"
 [features]
 mock-network = []
 testing = []
+chaos = []

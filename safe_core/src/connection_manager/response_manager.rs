@@ -6,12 +6,25 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use futures::sync::oneshot::Sender;
+use futures::sync::oneshot::{Sender, Receiver};
 use log::trace;
+
+
+use tokio::prelude::FutureExt;
+use futures::Stream;
+
+use futures::{
+    sync::oneshot,
+    Future,
+    future::Map
+};
 
 use safe_nd::{MessageId, Response};
 
 use std::collections::HashMap;
+use crate::{when_chaotic_do};
+
+use log::debug;
 
 type ResponseRequiredCount = usize;
 type VoteCount = usize;
@@ -19,7 +32,7 @@ type VoteMap = HashMap<Response, VoteCount>;
 
 pub struct ResponseManager {
     /// MessageId to send_future channel map
-    requests: HashMap<MessageId, (Sender<Response>, VoteMap, ResponseRequiredCount)>,
+    requests: HashMap<MessageId, (Sender<Response>, VoteMap, ResponseRequiredCount ) >,
     /// Number of responses to aggregate before returning to a client
     response_threshold: usize,
 }
@@ -39,8 +52,79 @@ impl ResponseManager {
         value: (Sender<Response>, ResponseRequiredCount),
     ) -> Result<(), String> {
         let (sender, count) = value;
+
         let the_request = (sender, VoteMap::default(), count);
+        let message_id = msg_id.clone();
         let _ = self.requests.insert(msg_id, the_request);
+
+        Ok(())
+    }
+
+    fn update_or_send_msg_id( &mut self, msg_id: MessageId, optional_response: Option<Response> ) -> Result<(), String> {
+
+        debug!("Response Manager updating or sending a msg {:?}, response:: {:?}", &msg_id, &optional_response);        let response = optional_response.unwrap_or(safe_nd::Response::GetIData(Err(safe_nd::Error::NoSuchData)) );
+
+        let _ = self
+        // first remove the response and see how we deal with it (we re-add later if needed)
+        .requests
+        .remove(&msg_id)
+        .map(|(sender, mut vote_map, count)| {
+            let vote_response = response.clone();
+
+            // drop the count as we have this new response.
+            let current_count = count - 1;
+
+            // get our tally for this response
+            let cast_votes = vote_map.remove(&vote_response);
+
+            // if we already have this response, lets vote for it
+            if let Some(votes) = cast_votes {
+                trace!("Increasing vote count to {:?}", votes + 1);
+                let _ = vote_map.insert(vote_response, votes + 1);
+            } else {
+                // otherwise we add this as a candidate with one vote
+                let _ = vote_map.insert(vote_response, 1);
+            }
+
+            trace!("Response vote map looks like: {:?}", &vote_map);
+
+            // if 50+% successfull responses, we roll with it.
+            if current_count <= self.response_threshold {
+                let mut vote_met_threshold = false;
+
+                for (_response_key, votes) in vote_map.iter() {
+                    if votes >= &self.response_threshold {
+                        trace!("Response request, votes met the required threshold.");
+                        vote_met_threshold = true;
+                    }
+                }
+
+                // we met the threshold OR it's the last response... so we work with whatever we have
+                if vote_met_threshold || current_count == 0 {
+                    let mut new_voter_threshold = 0;
+                    let mut our_most_popular_response = &response;
+
+                    // find the most popular of our responses.
+                    for (response_key, votes) in vote_map.iter() {
+                        if votes > &new_voter_threshold {
+                            // this means we'll always go with whatever we hit here in first.
+                            new_voter_threshold = *votes;
+                            our_most_popular_response = response_key;
+                        }
+                    }
+
+                    let _ = sender.send(our_most_popular_response.clone());
+                    return;
+                }
+            }
+            let _ = self
+                .requests
+                .insert(msg_id, (sender, vote_map, current_count));
+        })
+        .or_else(|| {
+            trace!("No request found for message ID {:?}", msg_id);
+            None
+        });
         Ok(())
     }
 
@@ -52,72 +136,19 @@ impl ResponseManager {
             response
         );
 
-        let _ = self
-            // first remove the response and see how we deal with it (we re-add later if needed)
-            .requests
-            .remove(&msg_id)
-            .map(|(sender, mut vote_map, count)| {
-                let vote_response = response.clone();
+        when_chaotic_do!({
+            println!("Dropping reponse for msg_id: {:?}", &msg_id);
+            // drop some responses.
+            return Ok(());
+        });
 
-                // drop the count as we have this new response.
-                let current_count = count - 1;
-
-                // get our tally for this response
-                let cast_votes = vote_map.remove(&vote_response);
-
-                // if we already have this response, lets vote for it
-                if let Some(votes) = cast_votes {
-                    trace!("Increasing vote count to {:?}", votes + 1);
-                    let _ = vote_map.insert(vote_response, votes + 1);
-                } else {
-                    // otherwise we add this as a candidate with one vote
-                    let _ = vote_map.insert(vote_response, 1);
-                }
-
-                trace!("Response vote map looks like: {:?}", &vote_map);
-
-                // if 50+% successfull responses, we roll with it.
-                if current_count <= self.response_threshold {
-                    let mut vote_met_threshold = false;
-
-                    for (_response_key, votes) in vote_map.iter() {
-                        if votes >= &self.response_threshold {
-                            trace!("Response request, votes met the required threshold.");
-                            vote_met_threshold = true;
-                        }
-                    }
-
-                    // we met the threshold OR it's the last response... so we work with whatever we have
-                    if vote_met_threshold || current_count == 0 {
-                        let mut new_voter_threshold = 0;
-                        let mut our_most_popular_response = &response;
-
-                        // find the most popular of our responses.
-                        for (response_key, votes) in vote_map.iter() {
-                            if votes > &new_voter_threshold {
-                                // this means we'll always go with whatever we hit here in first.
-                                new_voter_threshold = *votes;
-                                our_most_popular_response = response_key;
-                            }
-                        }
-
-                        let _ = sender.send(our_most_popular_response.clone());
-                        return;
-                    }
-                }
-                let _ = self
-                    .requests
-                    .insert(msg_id, (sender, vote_map, current_count));
-            })
-            .or_else(|| {
-                trace!("No request found for message ID {:?}", msg_id);
-                None
-            });
+        self.update_or_send_msg_id( msg_id, Some(response) );
         Ok(())
     }
 }
 
 #[cfg(test)]
+#[cfg(not(feature = "chaos") )]
 mod tests {
     use futures::{sync::oneshot, Future};
     use rand::seq::SliceRandom;
@@ -151,6 +182,41 @@ mod tests {
             })
             .wait();
         Ok(())
+    }
+
+    #[test]
+    #[should_panic]
+    fn response_manager_failed_assert_is_caught_in_response() -> () {
+        // This test is to ensure that our _other_ tests are runnning properly and would actually capture
+        // a failure in responses.
+
+        let response_threshold = 1;
+
+        let mut response_manager = ResponseManager::new(response_threshold);
+
+        // set up a message
+        let message_id = safe_nd::MessageId::new();
+
+        let (sender_future, response_future) = oneshot::channel();
+        let expected_responses = 1; // for IData
+
+        // our pseudo data
+        let immutable_data = safe_nd::PubImmutableData::new(vec![6]);
+        let bad_immutable_data = safe_nd::PubImmutableData::new(vec![42]);
+
+        let response = safe_nd::Response::GetIData(Ok(safe_nd::IData::from(immutable_data)));
+        let bad_immutable_data_response = safe_nd::Response::GetIData(Ok(safe_nd::IData::from(bad_immutable_data)));
+        
+        let _ = response_manager.await_responses(message_id, (sender_future, expected_responses));
+        let _ = response_manager.handle_response(message_id, response.clone());
+
+        let assert_check = response_future
+            .map(move |i| {
+                assert_eq!(&i, &bad_immutable_data_response);
+            })
+            .wait();
+
+        ()
     }
 
     // basic test to ensure future response is being properly evaluated and our test fails for bad responses
@@ -387,6 +453,72 @@ mod tests {
         let _ = response_future
             .map(move |i| {
                 assert_eq!(&i, &other_response);
+            })
+            .wait();
+        Ok(())
+    }
+}
+
+
+
+
+#[cfg(test)]
+#[cfg(feature = "chaos")]
+mod chaos_tests {
+    use futures::{sync::oneshot, Future};
+    use rand::seq::SliceRandom;
+    use rand::thread_rng;
+
+    use super::*;
+
+
+    #[test]
+    fn response_manager_get_with_chaos_return_after_timeout_even_without_all_responses() -> Result<(), String> {
+        // this should probably have a 50% chaos when run so half all repsonses are lost. 
+        // (chances of all being lost would be  )
+        let response_threshold = 4;
+
+        let mut response_manager = ResponseManager::new(response_threshold);
+
+        // set up a message
+        let message_id = safe_nd::MessageId::new();
+
+        let (sender_future, response_future) = oneshot::channel();
+
+        let expected_responses = 7;
+
+        // our expected data
+        let data = safe_nd::MDataValue::from(vec![6]);
+        let other_data = safe_nd::MDataValue::from(vec![77]);
+
+        let response = safe_nd::Response::GetMDataValue(Ok(data));
+        let other_response = safe_nd::Response::GetMDataValue(Ok(other_data));
+
+        let mut responses_to_handle = vec![
+            response.clone(),
+            response.clone(),
+            response,
+            other_response.clone(),
+            other_response.clone(),
+            other_response.clone(),
+            other_response.clone(),
+        ];
+
+        let mut rng = thread_rng();
+
+        // lets shuffle the array to ensure order is not important
+        responses_to_handle.shuffle(&mut rng);
+
+        response_manager.await_responses(message_id, (sender_future, expected_responses))?;
+
+        for resp in responses_to_handle {
+            response_manager.handle_response(message_id, resp)?;
+        }
+
+        let _ = response_future
+            .map(move |i| {
+                // make sure we get here eventually
+                assert!(true);
             })
             .wait();
         Ok(())

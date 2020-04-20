@@ -13,6 +13,7 @@ use crate::{
     client::SafeKey, network_event::NetworkEvent, network_event::NetworkTx, CoreError, CoreFuture,
 };
 use crate::{fry, ok};
+
 use connection_group::ConnectionGroup;
 use futures::{future, Future};
 use log::{error, trace};

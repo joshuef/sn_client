@@ -21,11 +21,12 @@ use bincode::{deserialize, serialize};
 use log::error;
 use miscreant::aead::Aead;
 use miscreant::Aes128SivAead;
-use rand::distributions::{Alphanumeric, Distribution, Standard};
+use rand::distributions::{Alphanumeric, Distribution, Uniform, Standard};
 use rand::rngs::OsRng;
 use rand::{self, Rng};
 use serde::{Deserialize, Serialize};
 use tiny_keccak::sha3_512;
+
 
 /// Length of the symmetric encryption key.
 pub const SYM_ENC_KEY_LEN: usize = 32;
@@ -40,6 +41,35 @@ pub type SymEncKey = [u8; SYM_ENC_KEY_LEN];
 
 /// Symmetric encryption nonce
 pub type SymEncNonce = [u8; SYM_ENC_NONCE_LEN];
+
+
+/// Run code when a chotic event happens. (eg ignore message every X messages)
+#[macro_export]
+macro_rules! when_chaotic_do {
+    ( $x:expr) => {
+        {
+            #[cfg(feature = "chaos")]
+            {
+                use std::env;
+                use rand::distributions::{Distribution, Uniform};
+
+
+                    let mut rng = rand::thread_rng();
+                    let mut chaos_trigger : usize = env::var("SAFE_CHAOS_LEVEL").unwrap_or( "15".to_string() ).parse().unwrap(); // 15% chance of happening
+                    let die = Uniform::from(1..100);
+                    let throw = die.sample(&mut rng);
+                    trace!("Rolling the chaos die :O Threshold is {}, we got: {}", chaos_trigger, throw);
+
+                    if throw <= chaos_trigger {
+                        // do the chaos
+                        println!("Chaos!! :O Something _mad_ happened.");
+                        $x
+                    }
+                }
+
+        }
+    };
+}
 
 /// Easily create a `BTreeSet`.
 #[macro_export]

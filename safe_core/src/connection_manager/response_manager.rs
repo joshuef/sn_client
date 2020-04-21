@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use futures::sync::oneshot::{Sender, Receiver};
-use log::trace;
+use log::{trace, warn};
 
 
 use tokio::prelude::FutureExt;
@@ -137,7 +137,7 @@ impl ResponseManager {
         );
 
         when_chaotic_do!({
-            println!("Dropping reponse for msg_id: {:?}", &msg_id);
+            warn!("Chaos: Dropping reponse for msg_id: {:?}", &msg_id);
             // drop some responses.
             return Ok(());
         });

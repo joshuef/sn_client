@@ -27,6 +27,7 @@ use rand::{self, Rng};
 use serde::{Deserialize, Serialize};
 use tiny_keccak::sha3_512;
 
+use log::{warn};
 
 /// Length of the symmetric encryption key.
 pub const SYM_ENC_KEY_LEN: usize = 32;
@@ -62,7 +63,7 @@ macro_rules! when_chaotic_do {
 
                     if throw <= chaos_trigger {
                         // do the chaos
-                        println!("Chaos!! :O Something _mad_ happened.");
+                        warn!("Chaos!");
                         $x
                     }
                 }

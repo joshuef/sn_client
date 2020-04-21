@@ -11,6 +11,7 @@ use bincode::{deserialize, serialize};
 use bytes::Bytes;
 use crossbeam_channel::{self, Receiver};
 use futures::{
+    future,
     sync::oneshot::{self, Sender},
     Future,
 };
@@ -33,6 +34,7 @@ use std::{
 };
 use tokio::prelude::FutureExt;
 use unwrap::unwrap;
+use crate::{when_chaotic_do};
 
 use super::response_manager::ResponseManager;
 
@@ -305,6 +307,13 @@ impl Connected {
         msg: &Message,
     ) -> Box<CoreFuture<Response>> {
         trace!("Sending message {:?}", msg_id);
+       
+        when_chaotic_do!({
+            warn!("Chaos: Dropping message before send. Msg_id: {:?}", &msg_id);
+            // drop some responses.
+            return Box::new( future::result( Err(CoreError::from("Chaos happened. Message dropped.") ) ) );
+        });
+
         let mut rng = rand::thread_rng();
 
         let (sender_future, response_future) = oneshot::channel();

@@ -111,6 +111,8 @@ impl ConnectionManager {
         let mut tasks = Vec::default();
         for elder in &self.elders {
             let msg_bytes_clone = msg_bytes.clone();
+
+            // Create a new stream here to not have to worry about filtering replies
             let connection = Arc::clone(&elder.connection);
 
             let task_handle = tokio::spawn(async move {

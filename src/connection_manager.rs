@@ -16,7 +16,7 @@ use futures::{
     SinkExt,
 };
 use log::{error, info, trace, warn};
-use qp2p::{self, Config as QuicP2pConfig, Connection, Endpoint, QuicP2p};
+use qp2p::{self, Config as QuicP2pConfig, Connection, Endpoint, QuicP2p, RecvStream, SendStream};
 use sn_data_types::{
     BlsProof, ClientFullId, HandshakeRequest, HandshakeResponse, Message, MsgEnvelope, MsgSender,
     Proof, QueryResponse,
@@ -25,6 +25,12 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::task::JoinHandle;
 /// Simple map for correlating a response with votes from various elder responses.
 type VoteMap = HashMap<QueryResponse, usize>;
+#[derive(Clone)]
+struct ElderStreams {
+    send_stream: Arc<Mutex<SendStream>>,
+    recv_stream: Arc<Mutex<RecvStream>>,
+    connection: Arc<Mutex<Connection>>,
+}
 
 /// Initialises `QuicP2p` instance which can bootstrap to the network, establish
 /// connections and send messages to several nodes, as well as await responses from them.
@@ -32,7 +38,7 @@ type VoteMap = HashMap<QueryResponse, usize>;
 pub struct ConnectionManager {
     full_id: ClientFullId,
     qp2p: QuicP2p,
-    elder_connections: Vec<Arc<Mutex<Connection>>>,
+    elders: Vec<ElderStreams>,
     endpoint: Arc<Mutex<Endpoint>>,
     listeners: Vec<Arc<Option<Vec<JoinHandle<()>>>>>,
 }
@@ -47,7 +53,7 @@ impl ConnectionManager {
         Ok(Self {
             full_id,
             qp2p,
-            elder_connections: Vec::default(),
+            elders: Vec::default(),
             endpoint: Arc::new(Mutex::new(endpoint)),
             listeners: Vec::default(),
         })
@@ -76,11 +82,12 @@ impl ConnectionManager {
         // Send message to all Elders concurrently
         trace!("Sending command to all Elders...");
         let mut tasks = Vec::default();
-        for connection in &self.elder_connections {
+        for elder in &self.elders {
             let msg_bytes_clone = msg_bytes.clone();
-            let connection = Arc::clone(&connection);
+            let send_stream = Arc::clone(&elder.send_stream);
+            // let recv_stream = Arc::clone(&elder.recv_stream);
             let task_handle = tokio::spawn(async move {
-                let _ = connection.lock().await.send(msg_bytes_clone).await;
+                let _ = send_stream.lock().await.send(msg_bytes_clone).await;
             });
             tasks.push(task_handle);
         }
@@ -102,9 +109,9 @@ impl ConnectionManager {
         // We send the same message to all Elders concurrently,
         // and we try to find a majority on the responses
         let mut tasks = Vec::default();
-        for connection in &self.elder_connections {
+        for elder in &self.elders {
             let msg_bytes_clone = msg_bytes.clone();
-            let connection = Arc::clone(&connection);
+            let connection = Arc::clone(&elder.connection);
 
             let task_handle = tokio::spawn(async move {
                 let mut streams = connection.lock().await.send(msg_bytes_clone).await?;
@@ -170,7 +177,7 @@ impl ConnectionManager {
                                 }
                             }
 
-                            if number_of_responses == self.elder_connections.len() {
+                            if number_of_responses == self.elders.len() {
                                 trace!("No clear response above the threshold ({:?}), so choosing most popular response with: {:?} votes: {:?}", threshold, most_popular_response.1, most_popular_response.0);
                                 winner = most_popular_response;
                                 has_elected_a_response = true;
@@ -268,8 +275,8 @@ impl ConnectionManager {
 
                 let handshake = HandshakeRequest::Join(*full_id.public_id().public_key());
                 let msg = Bytes::from(serialize(&handshake)?);
-                let (_send_stream, mut receive_stream) = connection.send(msg).await?;
-                let final_response = receive_stream.next().await?;
+                let (send_stream, mut recv_stream) = connection.send(msg).await?;
+                let final_response = recv_stream.next().await?;
 
                 match deserialize(&final_response) {
                     Ok(HandshakeResponse::Challenge(node_public_key, challenge)) => {
@@ -282,7 +289,11 @@ impl ConnectionManager {
                         let msg = Bytes::from(serialize(&response)?);
                         let _ = connection.send(msg).await?;
 
-                        Ok(Arc::new(Mutex::new(connection)))
+                        Ok(ElderStreams {
+                            send_stream: Arc::new(Mutex::new(send_stream)),
+                            recv_stream: Arc::new(Mutex::new(recv_stream)),
+                            connection: Arc::new(Mutex::new(connection)),
+                        })
                     }
                     Ok(_) => Err(CoreError::from(
                         "Unexpected message type while expeccting challenge from Elder.",
@@ -308,23 +319,20 @@ impl ConnectionManager {
                 })?;
 
                 // We can now keep this connections in our instance
-                self.elder_connections.push(elder);
+                self.elders.push(elder);
             }
 
-            if self.elder_connections.len() > 2 {
+            if self.elders.len() > 2 {
                 has_sufficent_connections = true;
             }
 
             // TODO: is this an error?
-            if self.elder_connections.len() < 7 {
-                warn!(
-                    "Connected to only {:?} elders.",
-                    self.elder_connections.len()
-                );
+            if self.elders.len() < 7 {
+                warn!("Connected to only {:?} elders.", self.elders.len());
             }
         }
 
-        trace!("Connected to {} Elders.", self.elder_connections.len());
+        trace!("Connected to {} Elders.", self.elders.len());
         Ok(())
     }
 
@@ -332,49 +340,51 @@ impl ConnectionManager {
     pub async fn listen(&mut self) -> Result<Receiver<Message>, CoreError> {
         let (tx, rx) = channel::<Message>(128);
         info!("CM: Adding listener");
+
+        // TODO: refactor this if we can more reaily listen on just the one connection.
         let mut conn_handles = vec![];
-        for connection in &self.elder_connections {
-            // self.endpoint.listen... gets us incoming connections... (per elder)
-            let endpoint = Arc::clone(&self.endpoint);
-            // let endpoint = self.endpoint.lock().await;
+        // for elder in &self.elders {
+        // self.endpoint.listen... gets us incoming connections... (per elder)
+        let endpoint = Arc::clone(&self.endpoint);
+        // let endpoint = self.endpoint.lock().await;
 
-            let mut sender = tx.clone();
-            // Spawn a thread for all the connections
-            let handle = tokio::spawn(async move {
-                warn!("...............................................................Listening for incoming connections on elder.......");
+        let mut sender = tx.clone();
+        // Spawn a thread for all the connections
+        let handle = tokio::spawn(async move {
+            warn!("...............................................................Listening for incoming connections on elder.......");
 
-                // do this ONCE not a loop
-                // while let Ok(mut incoming) =
-                let mut incoming = endpoint.lock().await.listen().unwrap();
+            // do this ONCE not a loop
+            // while let Ok(mut incoming) =
+            let mut incoming = endpoint.lock().await.listen().unwrap();
 
-                // incoming is for every new connection.
-                // things that are already establish....
-                //
-                // one idea is one
-                while let Some(mut msg) = (incoming.next()).await {
-                    warn!("Something this way comes......");
-                    while let Some(qp2p_message) = (msg.next()).await {
-                        warn!("qp2p message came innnnnnnnnnnnnnnnnnnnnnnnnnnnnn this way comes......");
+            // incoming is for every new connection.
+            // things that are already establish....
+            //
+            // one idea is one
+            while let Some(mut msg) = (incoming.next()).await {
+                warn!("Something this way comes......");
+                while let Some(qp2p_message) = (msg.next()).await {
+                    warn!("qp2p message came innnnnnnnnnnnnnnnnnnnnnnnnnnnnn this way comes......");
 
-                        match qp2p_message {
-                            qp2p::Message::BiStream { bytes, .. } => {
-                                match deserialize::<MsgEnvelope>(&bytes) {
-                                    Ok(envelope) => {
-                                        let _ = sender.send(envelope.message);
-                                    }
-                                    Err(_) => error!("Error deserializing qp2p network message"),
+                    match qp2p_message {
+                        qp2p::Message::BiStream { bytes, .. } => {
+                            match deserialize::<MsgEnvelope>(&bytes) {
+                                Ok(envelope) => {
+                                    let _ = sender.send(envelope.message);
                                 }
+                                Err(_) => error!("Error deserializing qp2p network message"),
                             }
-                            _ => error!(
-                                "Should not receive qp2p messages on non bi-directional stream"
-                            ),
+                        }
+                        _ => {
+                            error!("Should not receive qp2p messages on non bi-directional stream")
                         }
                     }
                 }
-                // }
-            });
-            conn_handles.push(handle);
-        }
+            }
+            // }
+        });
+        conn_handles.push(handle);
+        // }
         self.listeners.push(Arc::new(Some(conn_handles)));
         Ok(rx)
     }

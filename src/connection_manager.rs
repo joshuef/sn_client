@@ -26,7 +26,6 @@ use tokio::task::JoinHandle;
 /// Simple map for correlating a response with votes from various elder responses.
 type VoteMap = HashMap<QueryResponse, usize>;
 
-
 /// Initialises `QuicP2p` instance which can bootstrap to the network, establish
 /// connections and send messages to several nodes, as well as await responses from them.
 #[derive(Clone)]
@@ -257,20 +256,19 @@ impl ConnectionManager {
         // Connect to all Elders concurrently
         // We spawn a task per each node to connect to
         let mut tasks = Vec::default();
-        
+
         for peer_addr in elders_addrs {
             let full_id = self.full_id.clone();
-            
+
             // We use one endpoint for all elders
             let endpoint = Arc::clone(&self.endpoint);
 
             let task_handle = tokio::spawn(async move {
-                
-                let  connection = endpoint.lock().await.connect_to(&peer_addr).await?;
+                let connection = endpoint.lock().await.connect_to(&peer_addr).await?;
 
                 let handshake = HandshakeRequest::Join(*full_id.public_id().public_key());
                 let msg = Bytes::from(serialize(&handshake)?);
-                let (_send_stream, mut receive_stream ) = connection.send(msg).await?;
+                let (_send_stream, mut receive_stream) = connection.send(msg).await?;
                 let final_response = receive_stream.next().await?;
 
                 match deserialize(&final_response) {
@@ -283,8 +281,8 @@ impl ConnectionManager {
                         let response = HandshakeRequest::ChallengeResult(full_id.sign(&challenge));
                         let msg = Bytes::from(serialize(&response)?);
                         let _ = connection.send(msg).await?;
-                        
-                        Ok( Arc::new(Mutex::new(connection)) )
+
+                        Ok(Arc::new(Mutex::new(connection)))
                     }
                     Ok(_) => Err(CoreError::from(
                         "Unexpected message type while expeccting challenge from Elder.",
@@ -319,7 +317,10 @@ impl ConnectionManager {
 
             // TODO: is this an error?
             if self.elder_connections.len() < 7 {
-                warn!("Connected to only {:?} elders.", self.elder_connections.len());
+                warn!(
+                    "Connected to only {:?} elders.",
+                    self.elder_connections.len()
+                );
             }
         }
 
@@ -333,7 +334,6 @@ impl ConnectionManager {
         info!("CM: Adding listener");
         let mut conn_handles = vec![];
         for connection in &self.elder_connections {
-
             // self.endpoint.listen... gets us incoming connections... (per elder)
             let endpoint = Arc::clone(&self.endpoint);
             // let endpoint = self.endpoint.lock().await;
@@ -341,41 +341,36 @@ impl ConnectionManager {
             let mut sender = tx.clone();
             // Spawn a thread for all the connections
             let handle = tokio::spawn(async move {
-
                 warn!("...............................................................Listening for incoming connections on elder.......");
 
                 // do this ONCE not a loop
-                // while let Ok(mut incoming) = 
+                // while let Ok(mut incoming) =
                 let mut incoming = endpoint.lock().await.listen().unwrap();
 
+                // incoming is for every new connection.
+                // things that are already establish....
+                //
+                // one idea is one
+                while let Some(mut msg) = (incoming.next()).await {
+                    warn!("Something this way comes......");
+                    while let Some(qp2p_message) = (msg.next()).await {
+                        warn!("qp2p message came innnnnnnnnnnnnnnnnnnnnnnnnnnnnn this way comes......");
 
-
-                    // incoming is for every new connection.
-                    // things that are already establish....
-                    // 
-                    // one idea is one 
-                    while let Some(mut msg) = (incoming.next()).await {
-                        warn!("Something this way comes......");
-                        while let Some(qp2p_message) = (msg.next()).await {
-                            warn!("qp2p message came innnnnnnnnnnnnnnnnnnnnnnnnnnnnn this way comes......");
-
-                            match qp2p_message {
-                                qp2p::Message::BiStream { bytes, .. } => {
-                                    match deserialize::<MsgEnvelope>(&bytes) {
-                                        Ok(envelope) => {
-                                            let _ = sender.send(envelope.message);
-                                        }
-                                        Err(_) => {
-                                            error!("Error deserializing qp2p network message")
-                                        }
+                        match qp2p_message {
+                            qp2p::Message::BiStream { bytes, .. } => {
+                                match deserialize::<MsgEnvelope>(&bytes) {
+                                    Ok(envelope) => {
+                                        let _ = sender.send(envelope.message);
                                     }
+                                    Err(_) => error!("Error deserializing qp2p network message"),
                                 }
-                                _ => error!(
-                                    "Should not receive qp2p messages on non bi-directional stream"
-                                ),
                             }
+                            _ => error!(
+                                "Should not receive qp2p messages on non bi-directional stream"
+                            ),
                         }
                     }
+                }
                 // }
             });
             conn_handles.push(handle);

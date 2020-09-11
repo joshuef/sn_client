@@ -178,7 +178,6 @@ impl Client {
 
         let _ = full_client.get_history().await?;
 
-
         Ok(full_client)
     }
 
@@ -187,7 +186,6 @@ impl Client {
     /// This can be useful to check for CmdErrors related to write operations, or to handle incoming TransferValidation events.
     ///
     async fn listen_to_network(&mut self) -> Result<(), CoreError> {
-
         trace!("^^^^^^^^^^^^^^listening!");
         let conn_manager = Arc::clone(&self.connection_manager);
         let mut receiver = conn_manager.lock().await.listen().await?;
@@ -219,7 +217,10 @@ impl Client {
                         //     Err(e) => error!("Unexpected error while handling validation: {:?}", e),
                         // }
                     }
-                    m => error!(">>>>>>>>>>>>>>>>Unexpected message found while listening: {:?}", m),
+                    m => error!(
+                        ">>>>>>>>>>>>>>>>Unexpected message found while listening: {:?}",
+                        m
+                    ),
                 }
             }
 

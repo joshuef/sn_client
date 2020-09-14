@@ -278,7 +278,7 @@ impl ConnectionManager {
 
                 let handshake = HandshakeRequest::Join(*full_id.public_id().public_key());
                 let msg = Bytes::from(serialize(&handshake)?);
-                let (send_stream, mut recv_stream) = connection.send(msg).await?;
+                let (_send_stream, mut recv_stream) = connection.send(msg).await?;
                 let final_response = recv_stream.next().await?;
 
                 match deserialize(&final_response) {
@@ -290,7 +290,7 @@ impl ConnectionManager {
                         );
                         let response = HandshakeRequest::ChallengeResult(full_id.sign(&challenge));
                         let msg = Bytes::from(serialize(&response)?);
-                        let _ = connection.send(msg).await?;
+                        let (send_stream, recv_stream)  = connection.send(msg).await?;
 
                         Ok(ElderStreams {
                             send_stream: Arc::new(Mutex::new(send_stream)),

@@ -80,7 +80,7 @@ impl ConnectionManager {
         let msg_bytes = self.serialise_in_envelope(msg)?;
 
         // Send message to all Elders concurrently
-        trace!("Sending command to all Elders...");
+        trace!(".........................Sending command to all Elders... MSG ID:{:?}", msg.id());
         let mut tasks = Vec::default();
         for elder in &self.elders {
             let msg_bytes_clone = msg_bytes.clone();

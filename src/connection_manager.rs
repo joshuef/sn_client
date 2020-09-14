@@ -32,6 +32,8 @@ struct ElderStreams {
     connection: Arc<Mutex<Connection>>,
 }
 
+/// JoinHandle for recv stream listener thread
+type NetworkListenerHandle = JoinHandle<Result<(),CoreError>>;
 /// Initialises `QuicP2p` instance which can bootstrap to the network, establish
 /// connections and send messages to several nodes, as well as await responses from them.
 #[derive(Clone)]
@@ -40,7 +42,7 @@ pub struct ConnectionManager {
     qp2p: QuicP2p,
     elders: Vec<ElderStreams>,
     endpoint: Arc<Mutex<Endpoint>>,
-    listeners: Vec<Arc<Option<Vec<JoinHandle<()>>>>>,
+    listeners: Vec<Arc<Option<Vec<NetworkListenerHandle>>>>,
 }
 
 impl ConnectionManager {
@@ -354,30 +356,45 @@ impl ConnectionManager {
         // Spawn a thread for all the connections
         for elder in &self.elders {
             let mut sender = tx.clone();
-            let mut receiver = Arc::clone(&elder.recv_stream);
+            let receiver = Arc::clone(&elder.recv_stream);
             let handle = tokio::spawn(async move {
                 warn!("...............................................................Listening for incoming connections on elder.......");
 
                 // this is recv stream used to send challenge response. Send
-                while let Ok(bytes) = receiver.lock().await.next().await {
-                    // Ok(bytes) => {
-                    warn!("Something this way comes......");
-                    warn!("bytes len: {:?}", &bytes.len());
+                let bytes = match receiver.lock().await.next().await {
+                    Ok(bytes) => {
+                        warn!("Something this way comes......");
+                        warn!("bytes len: {:?}", &bytes.len());
+    
+                        // match deserialize::<MsgEnvelope>(&bytes) {
+                        //     Ok(envelope) => {
+                        //         // envelope
+    
+                        //         warn!(
+                        //             "!!!!!!!!!!!!!!!!!!!!!!!!MESSAGE RECEIVEIEDDDDD, {:?}",
+                        //             envelope.message
+                        //         );
+                        //         let _ = sender.send(envelope.message);
+                        //     }
+                        //     Err(_) => error!("Error deserializing network message"),
+                        // };
+                            Ok(())
+                    },
+                    Err(error) => {
+                        error!("===============================");
+                        error!("===============================");
+                        error!("===============================");
+                        error!("===============================");
+                        error!("===============================Some error when listening for bytes {:?}", error);
+                        Err(CoreError::from("Error getting bytes from receive stream...."))
+                    }
 
-                    match deserialize::<MsgEnvelope>(&bytes) {
-                        Ok(envelope) => {
-                            // envelope
+                }?;
 
-                            warn!(
-                                "!!!!!!!!!!!!!!!!!!!!!!!!MESSAGE RECEIVEIEDDDDD, {:?}",
-                                envelope.message
-                            );
-                            let _ = sender.send(envelope.message);
-                        }
-                        Err(_) => error!("Error deserializing network message"),
-                    };
+                warn!("??????????????????????????????????");
+                warn!("???listening _oVER_-_____________________?");
 
-                }
+                Ok::<(), CoreError>(())
             });
 
             conn_handles.push(handle);

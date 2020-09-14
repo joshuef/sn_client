@@ -358,10 +358,11 @@ impl ConnectionManager {
             let mut sender = tx.clone();
             let receiver = Arc::clone(&elder.recv_stream);
             let handle = tokio::spawn(async move {
+                let mut recv = receiver.lock().await;
                 warn!("...............................................................Listening for incoming connections on elder.......");
 
                 // this is recv stream used to send challenge response. Send
-                let bytes = match receiver.lock().await.next().await {
+                let bytes = match recv.next().await {
                     Ok(bytes) => {
                         warn!("Something this way comes......");
                         warn!("bytes len: {:?}", &bytes.len());

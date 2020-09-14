@@ -160,33 +160,42 @@ impl Client {
                 signed_transfer: signed_transfer.clone(),
             }))?;
 
-        let debit_proof: DebitAgreementProof = self
-            .await_validation(&message, signed_transfer.id())
-            .await?;
+        // let debit_proof: DebitAgreementProof = self
+        //     .await_validation(&message, signed_transfer.id())
+        //     .await?;
+        info!("sending validation req manualllly");
 
-        // Register the transfer on the network.
-        let msg_contents = Cmd::Transfer(TransferCmd::RegisterTransfer(debit_proof.clone()));
-
-        let message = Self::create_cmd_message(msg_contents);
-        trace!(
-            "Debit proof received and to be sent in RegisterTransfer req: {:?}",
-            debit_proof
-        );
-
-        let _ = self
-            .connection_manager
+        self.connection_manager
             .lock()
             .await
             .send_cmd(&message)
             .await?;
+        
+            info!("THIS IS WHERE WEWANT A DEBIT PROOF PLZZZZZZZZZZZ");
 
-        let mut actor = self.transfer_actor.lock().await;
-        // First register with local actor, then reply.
-        let register_event = actor
-            .register(debit_proof)?
-            .ok_or_else(|| CoreError::from("No transfer event to register locally"))?;
+        // // Register the transfer on the network.
+        // let msg_contents = Cmd::Transfer(TransferCmd::RegisterTransfer(debit_proof.clone()));
 
-        actor.apply(ActorEvent::TransferRegistrationSent(register_event))?;
+        // let message = Self::create_cmd_message(msg_contents);
+        // trace!(
+        //     "Debit proof received and to be sent in RegisterTransfer req: {:?}",
+        //     debit_proof
+        // );
+
+        // let _ = self
+        //     .connection_manager
+        //     .lock()c
+        //     .await
+        //     .send_cmd(&message)
+        //     .await?;
+
+        // let mut actor = self.transfer_actor.lock().await;
+        // // First register with local actor, then reply.
+        // let register_event = actor
+        //     .register(debit_proof)?
+        //     .ok_or_else(|| CoreError::from("No transfer event to register locally"))?;
+
+        // actor.apply(ActorEvent::TransferRegistrationSent(register_event))?;
 
         Ok(())
     }
@@ -217,6 +226,8 @@ mod tests {
 
         let _ = client.send_money(pk2, Money::from_str("1")?).await?;
 
+        std::thread::sleep(std::time::Duration::from_secs(20));
+
         // initial 10 on creation from farming simulation minus 1
         assert_eq!(client.get_local_balance().await, Money::from_str("9")?);
 
@@ -236,6 +247,8 @@ mod tests {
         let pk2 = PublicKey::Bls(pk2);
 
         let mut client = Client::new(Some(sk.clone())).await?;
+
+
 
         println!("starting.....");
         let _ = client.send_money(pk2, Money::from_str("1")?).await?;

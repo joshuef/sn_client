@@ -44,6 +44,7 @@ use sn_data_types::{
 
 #[cfg(feature = "simulated-payouts")]
 use std::str::FromStr;
+use futures::channel::mpsc::Receiver;
 
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -79,7 +80,7 @@ pub struct Client {
     replicas_pk_set: PublicKeySet,
     simulated_farming_payout_dot: Dot<PublicKey>,
     connection_manager: Arc<Mutex<ConnectionManager>>,
-    network_listener: Arc<Mutex<Option<ListenHandle>>>,
+    network_listener: Arc<Mutex<ListenHandle>>,
 }
 
 /// Easily manage connections to/from The Safe Network with the client and its APIs.
@@ -130,6 +131,10 @@ impl Client {
         // Create the connection manager
         let mut connection_manager =
             attempt_bootstrap(&Config::new().qp2p, full_id.clone()).await?;
+        
+        // let _ = connection_manager.listen().await;
+        let listener = Self::listen_to_network(&mut connection_manager).await?;
+
 
         // random PK used for from payment
         let random_payment_id = ClientFullId::new_bls(&mut rng);
@@ -156,8 +161,11 @@ impl Client {
             simulated_farming_payout_dot,
             blob_cache: Arc::new(Mutex::new(LruCache::new(IMMUT_DATA_CACHE_SIZE))),
             sequence_cache: Arc::new(Mutex::new(LruCache::new(SEQUENCE_CRDT_REPLICA_SIZE))),
-            network_listener: Arc::new(Mutex::new(None)),
+            network_listener: Arc::new(Mutex::new(listener)),
         };
+
+        //Start listening for Events
+        // let _ = full_client.listen_to_network().await?;
 
         #[cfg(feature = "simulated-payouts")]
         {
@@ -173,9 +181,6 @@ impl Client {
             }
         }
 
-        //Start listening for Events
-        let _ = full_client.listen_to_network().await?;
-
         let _ = full_client.get_history().await?;
 
         Ok(full_client)
@@ -185,10 +190,17 @@ impl Client {
     ///
     /// This can be useful to check for CmdErrors related to write operations, or to handle incoming TransferValidation events.
     ///
-    async fn listen_to_network(&mut self) -> Result<(), CoreError> {
+    pub async fn listen_to_network( conn_manager: &mut ConnectionManager) -> Result<JoinHandle<Result<(),CoreError>>, CoreError> {
         trace!("^^^^^^^^^^^^^^listening!");
-        let conn_manager = Arc::clone(&self.connection_manager);
-        let mut receiver = conn_manager.lock().await.listen().await?;
+        trace!("^^^^^^^^^^^^^^listening!");
+        trace!("^^^^^^^^^^^^^^listening!");
+        trace!("^^^^^^^^^^^^^^listening!");
+        trace!("^^^^^^^^^^^^^^listening!");
+        trace!("^^^^^^^^^^^^^^listening!");
+        trace!("^^^^^^^^^^^^^^listening!");
+        trace!("^^^^^^^^^^^^^^listening!");
+        // let conn_manager = Arc::clone(&self.connection_manager);
+        let mut receiver = conn_manager.listen().await?;
 
         let listener = async move {
             while let Some(message) = receiver.try_next().map_err(|error| {
@@ -227,9 +239,9 @@ impl Client {
             Ok::<(), CoreError>(())
         };
 
-        self.network_listener = Arc::new(Mutex::new(Some(tokio::spawn(listener))));
+        // self.network_listener = Arc::new(Mutex::new(Some(tokio::spawn(listener))));
 
-        Ok(())
+        Ok(tokio::spawn(listener))
     }
     /*
         async fn check_debit_cache(&mut self, id: TransferId) -> DebitAgreementProof {

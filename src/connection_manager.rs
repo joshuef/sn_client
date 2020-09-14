@@ -80,7 +80,10 @@ impl ConnectionManager {
         let msg_bytes = self.serialise_in_envelope(msg)?;
 
         // Send message to all Elders concurrently
-        trace!(".........................Sending command to all Elders... MSG ID:{:?}", msg.id());
+        trace!(
+            ".........................Sending command to all Elders... MSG ID:{:?}",
+            msg.id()
+        );
         let mut tasks = Vec::default();
         for elder in &self.elders {
             let msg_bytes_clone = msg_bytes.clone();
@@ -88,6 +91,7 @@ impl ConnectionManager {
             let connection = Arc::clone(&elder.connection);
             // let recv_stream = Arc::clone(&elder.recv_stream);
             let task_handle = tokio::spawn(async move {
+                // let _ = send_stream.lock().await.send(msg_bytes_clone).await;
                 let _ = connection.lock().await.send(msg_bytes_clone).await;
             });
             tasks.push(task_handle);
@@ -290,7 +294,7 @@ impl ConnectionManager {
                         );
                         let response = HandshakeRequest::ChallengeResult(full_id.sign(&challenge));
                         let msg = Bytes::from(serialize(&response)?);
-                        let (send_stream, recv_stream)  = connection.send(msg).await?;
+                        let (send_stream, recv_stream) = connection.send(msg).await?;
 
                         Ok(ElderStreams {
                             send_stream: Arc::new(Mutex::new(send_stream)),
@@ -351,47 +355,42 @@ impl ConnectionManager {
         // let endpoint = Arc::clone(&self.endpoint);
         // let endpoint = self.endpoint.lock().await;
 
-
-
         // Spawn a thread for all the connections
-        
-        
+
         for elder in &self.elders {
             let mut sender = tx.clone();
             let mut receiver = Arc::clone(&elder.recv_stream);
             let handle = tokio::spawn(async move {
                 warn!("...............................................................Listening for incoming connections on elder.......");
-            
-                // this is recv stream used to send challenge response. Send 
+
+                // this is recv stream used to send challenge response. Send
                 while let Ok(bytes) = receiver.lock().await.next().await {
                     // Ok(bytes) => {
-                        warn!("Something this way comes......");
-                        warn!("bytes len: {:?}",&bytes.len());
+                    warn!("Something this way comes......");
+                    warn!("bytes len: {:?}", &bytes.len());
 
-                        // let msg = deserialize(bytes)
+                    // let msg = deserialize(bytes)
 
-                        // let msg = 
-                        match deserialize::<MsgEnvelope>(&bytes) {
-                                                    Ok(envelope) => {
-                                                        // envelope
+                    // let msg =
+                    match deserialize::<MsgEnvelope>(&bytes) {
+                        Ok(envelope) => {
+                            // envelope
 
-                                                        warn!("!!!!!!!!!!!!!!!!!!!!!!!!MESSAGE RECEIVEIEDDDDD, {:?}", envelope.message);
-                                                        let _ = sender.send(envelope.message);
+                            warn!(
+                                "!!!!!!!!!!!!!!!!!!!!!!!!MESSAGE RECEIVEIEDDDDD, {:?}",
+                                envelope.message
+                            );
+                            let _ = sender.send(envelope.message);
+                        }
+                        Err(_) => error!("Error deserializing network message"),
+                    };
 
-                                                    }
-                                                    Err(_) => error!("Error deserializing network message"),
-                                                };
-
-                                            
-                                            
-                        // Ok(deserialize(&bytes)?)
+                    // Ok(deserialize(&bytes)?)
                     // },
                     // Err(error) => Err(CoreError::from(format!("Error listening for messages: {:?}", error) ))
                 }
-
-
             });
-            
+
             // do this ONCE not a loop
             // while let Ok(mut incoming) =
             // let mut incoming = endpoint.lock().await.listen().unwrap();
@@ -400,29 +399,29 @@ impl ConnectionManager {
             // things that are already establish....
             //
             // one idea is one
-        //     while let Some(mut msg) = (incoming.next()).await {
-        //         warn!("Something this way comes......");
-        //         while let Some(qp2p_message) = (msg.next()).await {
-        //             warn!("qp2p message came innnnnnnnnnnnnnnnnnnnnnnnnnnnnn this way comes......");
+            //     while let Some(mut msg) = (incoming.next()).await {
+            //         warn!("Something this way comes......");
+            //         while let Some(qp2p_message) = (msg.next()).await {
+            //             warn!("qp2p message came innnnnnnnnnnnnnnnnnnnnnnnnnnnnn this way comes......");
 
-        //             match qp2p_message {
-        //                 qp2p::Message::BiStream { bytes, .. } => {
-        //                     match deserialize::<MsgEnvelope>(&bytes) {
-        //                         Ok(envelope) => {
-        //                             let _ = sender.send(envelope.message);
-        //                         }
-        //                         Err(_) => error!("Error deserializing qp2p network message"),
-        //                     }
-        //                 }
-        //                 _ => {
-        //                     error!("Should not receive qp2p messages on non bi-directional stream")
-        //                 }
-        //             }
-        //         }
-        //     // }
-        // });
-        conn_handles.push(handle);
-            }
+            //             match qp2p_message {
+            //                 qp2p::Message::BiStream { bytes, .. } => {
+            //                     match deserialize::<MsgEnvelope>(&bytes) {
+            //                         Ok(envelope) => {
+            //                             let _ = sender.send(envelope.message);
+            //                         }
+            //                         Err(_) => error!("Error deserializing qp2p network message"),
+            //                     }
+            //                 }
+            //                 _ => {
+            //                     error!("Should not receive qp2p messages on non bi-directional stream")
+            //                 }
+            //             }
+            //         }
+            //     // }
+            // });
+            conn_handles.push(handle);
+        }
         // }
         self.listeners.push(Arc::new(Some(conn_handles)));
         Ok(rx)

@@ -84,10 +84,11 @@ impl ConnectionManager {
         let mut tasks = Vec::default();
         for elder in &self.elders {
             let msg_bytes_clone = msg_bytes.clone();
-            let send_stream = Arc::clone(&elder.send_stream);
+            // let send_stream = Arc::clone(&elder.send_stream);
+            let connection = Arc::clone(&elder.connection);
             // let recv_stream = Arc::clone(&elder.recv_stream);
             let task_handle = tokio::spawn(async move {
-                let _ = send_stream.lock().await.send(msg_bytes_clone).await;
+                let _ = connection.lock().await.send(msg_bytes_clone).await;
             });
             tasks.push(task_handle);
         }

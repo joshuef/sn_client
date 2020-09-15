@@ -362,35 +362,40 @@ impl ConnectionManager {
                 warn!("...............................................................Listening for incoming connections on elder.......");
 
                 // this is recv stream used to send challenge response. Send
-                let bytes = match recv.next().await {
-                    Ok(bytes) => {
-                        warn!("Something this way comes......");
-                        warn!("bytes len: {:?}", &bytes.len());
-    
-                        // match deserialize::<MsgEnvelope>(&bytes) {
-                        //     Ok(envelope) => {
-                        //         // envelope
-    
-                        //         warn!(
-                        //             "!!!!!!!!!!!!!!!!!!!!!!!!MESSAGE RECEIVEIEDDDDD, {:?}",
-                        //             envelope.message
-                        //         );
-                        //         let _ = sender.send(envelope.message);
-                        //     }
-                        //     Err(_) => error!("Error deserializing network message"),
-                        // };
-                            Ok(())
-                    },
-                    Err(error) => {
-                        error!("===============================");
-                        error!("===============================");
-                        error!("===============================");
-                        error!("===============================");
-                        error!("===============================Some error when listening for bytes {:?}", error);
-                        Err(CoreError::from("Error getting bytes from receive stream...."))
+                while let bytes = recv.next().await {
+                    match bytes {
+
+                        Ok(bytes) => {
+                            warn!("Something this way comes......");
+                            warn!("bytes len: {:?}", &bytes.len());
+        
+                            match deserialize::<MsgEnvelope>(&bytes) {
+                                Ok(envelope) => {
+                                    // envelope
+        
+                                    warn!(
+                                        "!!!!!!!!!!!!!!!!!!!!!!!!MESSAGE RECEIVEIEDDDDD, {:?}",
+                                        envelope.message
+                                    );
+                                    let _ = sender.send(envelope.message);
+                                }
+                                Err(_) => error!("Error deserializing network message"),
+                            };
+                                // Ok(())
+                        },
+                        Err(error) => {
+                            error!("===============================");
+                            error!("===============================");
+                            error!("===============================");
+                            error!("===============================");
+                            error!("===============================Some error when listening for bytes {:?}", error);
+                            // Err(CoreError::from("Error getting bytes from receive stream...."))
+                        }
                     }
 
-                }?;
+                    
+
+                }
 
                 warn!("??????????????????????????????????");
                 warn!("???listening _oVER_-_____________________?");

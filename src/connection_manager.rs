@@ -10,7 +10,7 @@ use crate::CoreError;
 use bincode::{deserialize, serialize};
 use bytes::Bytes;
 use futures::{
-    channel::mpsc::{channel, Receiver},
+    channel::mpsc::{channel, Receiver, Sender},
     future::{join_all, select_all},
     lock::Mutex,
     SinkExt,
@@ -18,6 +18,7 @@ use futures::{
 use log::{error, info, trace, warn};
 use qp2p::{self, Config as QuicP2pConfig, Connection, Endpoint, QuicP2p, RecvStream, SendStream};
 use sn_data_types::{
+    MessageId,
     BlsProof, ClientFullId, HandshakeRequest, HandshakeResponse, Message, MsgEnvelope, MsgSender,
     Proof, QueryResponse,
 };
@@ -42,7 +43,7 @@ pub struct ConnectionManager {
     qp2p: QuicP2p,
     elders: Vec<ElderStreams>,
     endpoint: Arc<Mutex<Endpoint>>,
-
+    pending_queries: Arc<Mutex<HashMap<MessageId, Sender<Message>>>>,
     // TODO: why vec option vec here?
     listeners: Vec<Arc<Option<Vec<NetworkListenerHandle>>>>,
 }
@@ -60,6 +61,7 @@ impl ConnectionManager {
             elders: Vec::default(),
             endpoint: Arc::new(Mutex::new(endpoint)),
             listeners: Vec::default(),
+            pending_queries: Arc::new(Mutex::new(HashMap::default())),
         })
     }
 
@@ -113,28 +115,42 @@ impl ConnectionManager {
     /// Send a Query `Message` to the network awaiting for the response.
     pub async fn send_query(&mut self, msg: &Message) -> Result<QueryResponse, CoreError> {
         info!("Sending query message {:?} w/ id: {:?}", msg, msg.id());
+        let msg_id = msg.id().clone();
         let msg_bytes = self.serialise_in_envelope(msg)?;
-
+        let elders_length = self.elders.len();
         // We send the same message to all Elders concurrently,
         // and we try to find a majority on the responses
         let mut tasks = Vec::default();
         for elder in &self.elders {
             let msg_bytes_clone = msg_bytes.clone();
-
+            let pending_queries = Arc::clone( &self.pending_queries );
             // Create a new stream here to not have to worry about filtering replies
-            let connection = Arc::clone(&elder.connection);
+
+            let send_stream = Arc::clone(&elder.send_stream);
+            let recv_stream = Arc::clone(&elder.recv_stream);
+            // let connection = Arc::clone(&elder.connection);
 
             let task_handle = tokio::spawn(async move {
-                let mut streams = connection.lock().await.send(msg_bytes_clone).await?;
-                let response = streams.1.next().await?;
-                match deserialize(&response) {
-                    Ok(MsgEnvelope { message, .. }) => Ok(message),
-                    Err(e) => {
-                        let err_msg = format!("Unexpected deserialisation error: {:?}", e);
-                        error!("{}", err_msg);
-                        Err(CoreError::Unexpected(err_msg))
-                    }
+                let _ = send_stream.lock().await.send(msg_bytes_clone).await?;
+                let (tx, mut rx) = channel::<Message>(elders_length);
+                pending_queries.lock().await.insert(msg_id, tx);
+                // Ok(rx)
+                // let response = recv_stream.lock().await.next().await?;
+                if let Some(response_message)  = rx.try_next().map_err(|error| CoreError::from(format!("Problems receiving query response {:?}",error )))? {
+                    Ok(response_message)
                 }
+                else {
+                    Err(CoreError::from("Problems receiving query response"))
+                }
+
+                // match deserialize(&response) {
+                //     Ok(MsgEnvelope { message, .. }) => Ok(message),
+                //     Err(e) => {
+                //         let err_msg = format!("Unexpected deserialisation error: {:?}", e);
+                //         error!("{}", err_msg);
+                //         Err(CoreError::Unexpected(err_msg))
+                //     }
+                // }
             });
 
             tasks.push(task_handle);
@@ -354,8 +370,8 @@ impl ConnectionManager {
     }
 
     /// Listen for incoming messages via IncomingConnections.
-    pub async fn listen(&mut self) -> Result<Receiver<Message>, CoreError> {
-        let (tx, rx) = channel::<Message>(128);
+    pub async fn listen(&mut self) -> Result<(), CoreError> {
+        // let (tx, rx) = channel::<Message>(128);
         info!("CM: Adding listener");
 
         // TODO: refactor this if we can more reaily listen on just the one connection.
@@ -363,8 +379,9 @@ impl ConnectionManager {
 
         // Spawn a thread for all the connections
         for elder in &self.elders {
-            let mut sender = tx.clone();
+            // let mut sender = tx.clone();
             let receiver = Arc::clone(&elder.recv_stream);
+            let pending_queries = Arc::clone(&self.pending_queries);
             let handle = tokio::spawn(async move {
                 let mut recv = receiver.lock().await;
                 warn!("...............................................................Listening for incoming connections on elder.......");
@@ -380,12 +397,29 @@ impl ConnectionManager {
                             match deserialize::<MsgEnvelope>(&bytes) {
                                 Ok(envelope) => {
                                     // envelope
-        
+                                    let message = envelope.message;
                                     warn!(
                                         "!!!!!!!!!!!!!!!!!!!!!!!!MESSAGE RECEIVEIEDDDDD, {:?}",
-                                        envelope.message
+                                        &message
                                     );
-                                    let _ = sender.send(envelope.message);
+
+                                    match &message {
+                                        Message::QueryResponse{ correlation_id, response, .. } => {
+                                            if let Some( mut sender) = pending_queries.lock().await.remove(&correlation_id) {
+                                                sender.send(message);
+                                            }
+                                            else {
+                                                warn!("No query was awaiting this response: {:?}", correlation_id)
+                                            }
+
+                                        },
+                                        _ => {
+                                            warn!("NOT A QUERY RESPONSE RETURNED")
+                                        }
+                                    }
+
+                                    // if message.correlation_id
+                                    // let _ = sender.send(envelope.message);
                                 }
                                 Err(_) => error!("Error deserializing network message"),
                             };
@@ -415,6 +449,6 @@ impl ConnectionManager {
         }
         // }
         self.listeners.push(Arc::new(Some(conn_handles)));
-        Ok(rx)
+        Ok(())
     }
 }

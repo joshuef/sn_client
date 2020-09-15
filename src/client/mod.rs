@@ -186,63 +186,63 @@ impl Client {
         Ok(full_client)
     }
 
-    /// Listen to network events.
-    ///
-    /// This can be useful to check for CmdErrors related to write operations, or to handle incoming TransferValidation events.
-    ///
-    pub async fn listen_to_network( conn_manager: &mut ConnectionManager) -> Result<JoinHandle<Result<(),CoreError>>, CoreError> {
-        trace!("^^^^^^^^^^^^^^listening!");
-        trace!("^^^^^^^^^^^^^^listening!");
-        trace!("^^^^^^^^^^^^^^listening!");
-        trace!("^^^^^^^^^^^^^^listening!");
-        trace!("^^^^^^^^^^^^^^listening!");
-        trace!("^^^^^^^^^^^^^^listening!");
-        trace!("^^^^^^^^^^^^^^listening!");
-        trace!("^^^^^^^^^^^^^^listening!");
-        // let conn_manager = Arc::clone(&self.connection_manager);
-        let mut receiver = conn_manager.listen().await?;
+    // / Listen to network events.
+    // /
+    // / This can be useful to check for CmdErrors related to write operations, or to handle incoming TransferValidation events.
+    // /
+    // pub async fn listen_to_network( conn_manager: &mut ConnectionManager) -> Result<JoinHandle<Result<(),CoreError>>, CoreError> {
+    //     trace!("^^^^^^^^^^^^^^listening!");
+    //     trace!("^^^^^^^^^^^^^^listening!");
+    //     trace!("^^^^^^^^^^^^^^listening!");
+    //     trace!("^^^^^^^^^^^^^^listening!");
+    //     trace!("^^^^^^^^^^^^^^listening!");
+    //     trace!("^^^^^^^^^^^^^^listening!");
+    //     trace!("^^^^^^^^^^^^^^listening!");
+    //     trace!("^^^^^^^^^^^^^^listening!");
+    //     // let conn_manager = Arc::clone(&self.connection_manager);
+    //     let mut receiver = conn_manager.listen().await?;
 
-        let listener = async move {
-            while let Some(message) = receiver.try_next().map_err(|error| {
-                CoreError::from(format!("Error listening to network {:?}", error))
-            })? {
-                trace!("loglogin listener..................................");
-                match message {
-                    Message::Event {
-                        event,
-                        // correlation_id: _,
-                        ..
-                    } => {
-                        warn!("Event received {:?}", event);
-                        // match self.handle_validation_event(event).await {
-                        //     Ok(proof) => {
-                        //         match proof {
-                        //             Some(_debit) => {
-                        //                 // TODO: store response against correlation ID,
-                        //                 // use this id for retrieval in write apis.
-                        //                 info!("DO SOMETHING WITH PROOF");
-                        //                 // let _ = self.debit_cache.insert(debit.id(), debit);
-                        //             }
-                        //             None => warn!("Handled a validation Event"),
-                        //         }
-                        //     }
-                        //     Err(e) => error!("Unexpected error while handling validation: {:?}", e),
-                        // }
-                    }
-                    m => error!(
-                        ">>>>>>>>>>>>>>>>Unexpected message found while listening: {:?}",
-                        m
-                    ),
-                }
-            }
+    //     let listener = async move {
+    //         while let Some(message) = receiver.try_next().map_err(|error| {
+    //             CoreError::from(format!("Error listening to network {:?}", error))
+    //         })? {
+    //             trace!("loglogin listener..................................");
+    //             match message {
+    //                 Message::Event {
+    //                     event,
+    //                     // correlation_id: _,
+    //                     ..
+    //                 } => {
+    //                     warn!("Event received {:?}", event);
+    //                     // match self.handle_validation_event(event).await {
+    //                     //     Ok(proof) => {
+    //                     //         match proof {
+    //                     //             Some(_debit) => {
+    //                     //                 // TODO: store response against correlation ID,
+    //                     //                 // use this id for retrieval in write apis.
+    //                     //                 info!("DO SOMETHING WITH PROOF");
+    //                     //                 // let _ = self.debit_cache.insert(debit.id(), debit);
+    //                     //             }
+    //                     //             None => warn!("Handled a validation Event"),
+    //                     //         }
+    //                     //     }
+    //                     //     Err(e) => error!("Unexpected error while handling validation: {:?}", e),
+    //                     // }
+    //                 }
+    //                 m => error!(
+    //                     ">>>>>>>>>>>>>>>>Unexpected message found while listening: {:?}",
+    //                     m
+    //                 ),
+    //             }
+    //         }
 
-            Ok::<(), CoreError>(())
-        };
+    //         Ok::<(), CoreError>(())
+    //     };
 
         // self.network_listener = Arc::new(Mutex::new(Some(tokio::spawn(listener))));
 
-        Ok(tokio::spawn(listener))
-    }
+    //     Ok(tokio::spawn(listener))
+    // }
     /*
         async fn check_debit_cache(&mut self, id: TransferId) -> DebitAgreementProof {
             loop {

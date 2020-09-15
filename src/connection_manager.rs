@@ -77,7 +77,15 @@ impl ConnectionManager {
         let elders_addrs = self.bootstrap_and_handshake().await?;
 
         // Let's now connect to all Elders
-        self.connect_to_elders(elders_addrs).await
+        self.connect_to_elders(elders_addrs).await?;
+
+        self.listen().await?;
+
+        // TODO: why does this delay listener initiation?
+        // std::thread::sleep(std::time::Duration::from_secs(15));
+
+        Ok(())
+
     }
 
     /// Send a `Message` to the network without awaiting for a response.
@@ -362,9 +370,6 @@ impl ConnectionManager {
                 warn!("Connected to only {:?} elders.", self.elders.len());
             }
         }
-
-        self.listen().await;
-
         trace!("Connected to {} Elders.", self.elders.len());
         Ok(())
     }
@@ -379,11 +384,20 @@ impl ConnectionManager {
 
         // Spawn a thread for all the connections
         for elder in &self.elders {
+
+            info!("setting up listener per elder");
             // let mut sender = tx.clone();
             let receiver = Arc::clone(&elder.recv_stream);
+            info!("got receiver");
+
             let pending_queries = Arc::clone(&self.pending_queries);
+
+            info!("got pending qs");
+
             let handle = tokio::spawn(async move {
+                warn!("new thread started");
                 let mut recv = receiver.lock().await;
+                warn!("got the receiverrrrr");
                 warn!("...............................................................Listening for incoming connections on elder.......");
 
                 // this is recv stream used to send challenge response. Send
@@ -448,6 +462,8 @@ impl ConnectionManager {
             conn_handles.push(handle);
         }
         // }
+
+        info!("writing listeners to CM struct");
         self.listeners.push(Arc::new(Some(conn_handles)));
         Ok(())
     }

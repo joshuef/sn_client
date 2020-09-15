@@ -142,6 +142,11 @@ impl Client {
 
         let simulated_farming_payout_dot = Dot::new(*random_payment_pk, 0);
 
+        info!("waiting before doing query");
+                std::thread::sleep(std::time::Duration::from_secs(15));
+
+        info!("done waiting before doing query");
+
         let replicas_pk_set =
             Self::get_replica_keys(full_id.clone(), &mut connection_manager).await?;
 

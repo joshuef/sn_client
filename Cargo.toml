@@ -38,7 +38,7 @@ serde-value = "~0.5.3"
 sha3 = "~0.8.2"
 tiny-keccak = "1.5.0"
 threshold_crypto = "0.4.0"
-tokio = { version="~0.2.21", features=["rt-core", "blocking", "stream", "rt-util"] }
+tokio = { version="~0.2.21", features=["rt-threaded", "blocking", "stream", "rt-util"] }
 unwrap = "1.2.0"
 url = "2.1.0"
 ws = "~0.9.1"

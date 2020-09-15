@@ -42,6 +42,8 @@ pub struct ConnectionManager {
     qp2p: QuicP2p,
     elders: Vec<ElderStreams>,
     endpoint: Arc<Mutex<Endpoint>>,
+
+    // TODO: why vec option vec here?
     listeners: Vec<Arc<Option<Vec<NetworkListenerHandle>>>>,
 }
 
@@ -314,6 +316,8 @@ impl ConnectionManager {
         }
 
         // Let's await for them to all successfully connect, or fail if at least one failed
+        
+        //TODO: Do we need a timeout here to check sufficient time has passed + or sufficient connections?
         let mut has_sufficent_connections = false;
 
         let mut todo = tasks;
@@ -331,6 +335,8 @@ impl ConnectionManager {
                 self.elders.push(elder);
             }
 
+            // TODO: this will effectively stop driving futures after we get 2...
+            // We should still let all progress... just without blocking
             if self.elders.len() > 2 {
                 has_sufficent_connections = true;
             }
@@ -340,6 +346,8 @@ impl ConnectionManager {
                 warn!("Connected to only {:?} elders.", self.elders.len());
             }
         }
+
+        self.listen().await;
 
         trace!("Connected to {} Elders.", self.elders.len());
         Ok(())

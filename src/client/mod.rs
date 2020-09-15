@@ -80,7 +80,7 @@ pub struct Client {
     replicas_pk_set: PublicKeySet,
     simulated_farming_payout_dot: Dot<PublicKey>,
     connection_manager: Arc<Mutex<ConnectionManager>>,
-    network_listener: Arc<Mutex<ListenHandle>>,
+    // network_listener: Arc<Mutex<ListenHandle>>,
 }
 
 /// Easily manage connections to/from The Safe Network with the client and its APIs.
@@ -133,7 +133,7 @@ impl Client {
             attempt_bootstrap(&Config::new().qp2p, full_id.clone()).await?;
         
         // let _ = connection_manager.listen().await;
-        let listener = Self::listen_to_network(&mut connection_manager).await?;
+        // let listener = Self::listen_to_network(&mut connection_manager).await?;
 
 
         // random PK used for from payment
@@ -161,7 +161,7 @@ impl Client {
             simulated_farming_payout_dot,
             blob_cache: Arc::new(Mutex::new(LruCache::new(IMMUT_DATA_CACHE_SIZE))),
             sequence_cache: Arc::new(Mutex::new(LruCache::new(SEQUENCE_CRDT_REPLICA_SIZE))),
-            network_listener: Arc::new(Mutex::new(listener)),
+            // network_listener: Arc::new(Mutex::new(listener)),
         };
 
         //Start listening for Events

@@ -51,6 +51,7 @@ pub struct ConnectionManager {
 impl ConnectionManager {
     /// Create a new connection manager.
     pub fn new(mut config: QuicP2pConfig, full_id: ClientFullId) -> Result<Self, CoreError> {
+        debug!("qp2p config: {:?} ", config);
         config.port = Some(0); // Make sure we always use a random port for client connections.
         let qp2p = QuicP2p::with_config(Some(config), Default::default(), false)?;
         let endpoint = qp2p.new_endpoint()?;

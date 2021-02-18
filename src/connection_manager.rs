@@ -166,7 +166,7 @@ impl ConnectionManager {
         let msg_id = msg.id();
         debug!("--->>>> in send_cmd");
 
-        let endpoint = self.endpoint.lock().await.ok_or(Error::NotBootstrapped)?;
+        let endpoint = self.endpoint.lock().await.clone().ok_or(Error::NotBootstrapped)?;
         let src_addr = endpoint.socket_addr();
         info!(
             "Sending (from {}) command message {:?} w/ id: {:?}",
@@ -547,7 +547,7 @@ impl ConnectionManager {
         // We spawn a task per each node to connect to
         let mut tasks = Vec::default();
 
-        let endpoint = self.endpoint.clone().ok_or(Error::NotBootstrapped)?;
+        let endpoint = self.endpoint.lock().await.clone().ok_or(Error::NotBootstrapped)?;
         for peer_addr in elders_addrs {
             let keypair = self.keypair.clone();
 
@@ -634,11 +634,12 @@ impl ConnectionManager {
 
     /// Listen for incoming messages on a connection
     pub async fn listen_to_incoming_messages(
-        &mut self,
+        &self,
         mut incoming_messages: IncomingMessages,
     ) -> Result<(), Error> {
         debug!("Adding IncomingMessages listener");
-
+        
+        let cm = self.clone();
         // Spawn a thread for listening
         tokio::spawn(async move {
             trace!("Listener thread spawned");
@@ -649,10 +650,10 @@ impl ConnectionManager {
 
                 match message_type {
                     MessageType::NetworkInfo(msg) => {
-                        self.handle_infrastructure_msg(msg).await?
+                        cm.handle_infrastructure_msg(msg).await?
                     }
                     MessageType::ClientMessage(envelope) => {
-                        self.handle_client_msg(envelope, src).await;
+                        cm.handle_client_msg(envelope, src).await;
                     }
                     msg_type => {
                         info!("Unexpected message type received: {:?}", msg_type);

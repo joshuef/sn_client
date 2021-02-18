@@ -64,7 +64,7 @@ pub struct ConnectionManager {
     endpoint: Arc<Mutex<Option<Endpoint>>>,
     pending_transfer_validations: Arc<Mutex<HashMap<MessageId, TransferValidationSender>>>,
     pending_query_responses: Arc<Mutex<HashMap<(SocketAddr, MessageId), QueryResponseSender>>>,
-    notification_sender: UnboundedSender<Error>,
+    notification_sender: Arc<Mutex<UnboundedSender<Error>>>,
     
     // receive the pk set when calling bootstrap func
     keyset_sender: Arc<Mutex<Sender<Result<ReplicaPublicKeySet, Error>>>>,
@@ -95,7 +95,7 @@ impl ConnectionManager {
             endpoint: Arc::new(Mutex::new(None)),
             pending_transfer_validations: Arc::new(Mutex::new(HashMap::default())),
             pending_query_responses: Arc::new(Mutex::new(HashMap::default())),
-            notification_sender,
+            notification_sender: Arc::new(Mutex::new(notification_sender)),
             // config_file_path,
             keyset_sender:Arc::new(Mutex::new(sender)),
             keyset_receiver:Arc::new(Mutex::new(receiver)),
@@ -146,10 +146,18 @@ impl ConnectionManager {
         // let (_, receiver) = channel;
         // keyset_sender = Some(sender);
 
-        debug!("11111 endpoint is: {:?}", self.endpoint.lock().await.is_some());
-        self.listen_to_incoming_messages(incoming_messages).await?;
-        debug!("2222 endpoint is: {:?}", self.endpoint.lock().await.is_some());
+            {
 
+                debug!("11111 endpoint is: {:?}", self.endpoint.lock().await.is_some());
+            }
+        self.listen_to_incoming_messages(incoming_messages).await?;
+        // debug!("2222 endpoint is: {:?}", self.endpoint.lock().await.is_some());
+        {
+
+            debug!("22222 endpoint is: {:?}", self.endpoint.lock().await.is_some());
+        }
+
+        debug!("waitinggggggggggg");
         // wait on our section PK set to be received before progressing
         if let Some(res) = receiver.next().await {
             let pk_set = res?;
@@ -506,22 +514,27 @@ impl ConnectionManager {
     // Bootstrap to the network to obtaining the list of
     // nodes we should establish connections with
     async fn get_section(&self, bootstrap_nodes_override: &Vec<SocketAddr>) -> Result<IncomingMessages, Error> {
-        info!("Sending Infrastructure::GetSectionRequest");
+        info!("Sending NetworkInfo::GetSectionRequest");
+
+        trace!("override nodes: {:?}", bootstrap_nodes_override);
 
         // let qp2p = QuicP2p::with_config(Some(qp2p_config), Default::default(), false)?;
         // overwrite our qp2p instance with out new bootstrapped one
         // self.qp2p = qp2p;
 
         let (
-            endpoint,
+            the_endpoint,
             _incoming_connections,
             incoming_messages,
             _disconnections,
             bootstrapped_peer,
         ) = self.qp2p.bootstrap(bootstrap_nodes_override).await?;
-        let mut our_endpoint = self.endpoint.lock().await;
-        *our_endpoint = Some(endpoint);
-        debug!("--->>> endpoitn setthere.... {:?}", self.endpoint.lock().await.is_some());
+        
+        {
+            let mut endpoint = self.endpoint.lock().await;
+            *endpoint = Some(the_endpoint);
+        }
+ 
 
         trace!("Sending handshake request to bootstrapped node...");
         let public_key = self.keypair.public_key();
@@ -530,7 +543,7 @@ impl ConnectionManager {
 
         let endpoint = self.endpoint.lock().await.clone().ok_or(Error::NotBootstrapped)?;
         endpoint.send_message(msg, &bootstrapped_peer).await?;
-
+        trace!("get section done");
         Ok(incoming_messages)
     }
 
@@ -580,6 +593,8 @@ impl ConnectionManager {
             });
             tasks.push(task_handle);
         }
+
+        trace!("Connection threads have been setup.");
 
         // TODO: Do we need a timeout here to check sufficient time has passed + or sufficient connections?
         let mut has_sufficent_connections = false;
@@ -641,7 +656,7 @@ impl ConnectionManager {
         
         let cm = self.clone();
         // Spawn a thread for listening
-        tokio::spawn(async move {
+        let _ = tokio::spawn(async move {
             trace!("Listener thread spawned");
 
             while let Some((src, message)) = incoming_messages.next().await {
@@ -650,9 +665,12 @@ impl ConnectionManager {
 
                 match message_type {
                     MessageType::NetworkInfo(msg) => {
+                        debug!("SHOULD HANDLE INFRA");
                         cm.handle_infrastructure_msg(msg).await?
                     }
                     MessageType::ClientMessage(envelope) => {
+                        debug!("SHOULD HANDLE CLIENT");
+
                         cm.handle_client_msg(envelope, src).await;
                     }
                     msg_type => {
@@ -664,6 +682,7 @@ impl ConnectionManager {
             Ok::<(), Error>(())
         });
 
+        debug!("outwith of listener");
         Ok(())
     }
 
@@ -694,7 +713,7 @@ impl ConnectionManager {
             NetworkInfoMsg::NetworkInfoUpdate(update) => {
                 let correlation_id = update.correlation_id;
                 error!("MessageId {:?} was interrupted due to infrastructure updates. This will most likely need to be sent again.", correlation_id);
-                if let Err(error) =  self.notification_sender.send(Error::NetworkInfoUpdateMayHaveAffectedMsg(correlation_id)) {
+                if let Err(error) =  self.notification_sender.lock().await.send(Error::NetworkInfoUpdateMayHaveAffectedMsg(correlation_id)) {
                    error!("Error notifying via sender. {:?}", error);
                 }
                 let error = update.error;
@@ -821,7 +840,7 @@ impl ConnectionManager {
                     warn!("No sender subscribing and listening for errors relating to message {:?}. Error returned is: {:?}", correlation_id, error)
                 }
 
-                let _ = notifier.send(Error::from(error));
+                let _ = notifier.lock().await.send(Error::from(error));
             }
             msg => {
                 warn!("another message type received {:?}", msg);

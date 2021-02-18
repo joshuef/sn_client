@@ -103,7 +103,10 @@ impl ConnectionManager {
         loop {
             let res = self.clone().bootstrap(bootstrap_config).await;
             match res {
-                Ok(pk_set) => return Ok((self, pk_set)),
+                Ok(pk_set) => {
+                    debug!(">>>>> bootstra done... endpoint is some?{:?}", self.endpoint.is_some());
+                    return Ok((self, pk_set))
+                },
                 Err(err) => {
                     attempts += 1;
                     if attempts < 3 {
@@ -114,6 +117,7 @@ impl ConnectionManager {
                 }
             }
         }
+
     }
 
     /// Bootstrap to the network maintaining connections to several nodes.
@@ -127,16 +131,6 @@ impl ConnectionManager {
             self.keypair.public_key()
         );
 
-        // bootstrap qp2p
-        // let (
-        //     endpoint,
-        //     _incoming_connections,
-        //     incoming_messages,
-        //     _disconnections,
-        //     bootstrapped_peer,
-        // ) = self.qp2p.bootstrap().await?;
-        // self.endpoint = Some(endpoint);
-
         // Bootstrap and send a handshake request to receive
         // the list of Elders we can then connect to
         let incoming_messages = self.get_section(bootstrap_config).await?;
@@ -144,7 +138,10 @@ impl ConnectionManager {
         
         let (sender, mut receiver) = channel::<Result<ReplicaPublicKeySet, Error>>(1);
         self.key_set_sender = Some(sender);
-        self.listen_to_incoming_messages(incoming_messages).await;
+
+        debug!("11111 endpoint is: {:?}", self.endpoint.clone().is_some());
+        self.listen_to_incoming_messages(incoming_messages).await?;
+        debug!("2222 endpoint is: {:?}", self.endpoint.is_some());
 
         // wait on our section PK set to be received before progressing
         if let Some(res) = receiver.next().await {
@@ -152,6 +149,7 @@ impl ConnectionManager {
 
             Ok(pk_set)
         } else {
+            debug!("--->>>> in boot");
             Err(Error::NotBootstrapped)
         }
     }
@@ -159,6 +157,7 @@ impl ConnectionManager {
     /// Send a `Message` to the network without awaiting for a response.
     pub async fn send_cmd(&mut self, msg: &Message) -> Result<(), Error> {
         let msg_id = msg.id();
+        debug!("--->>>> in send_cmd");
 
         let endpoint = self.endpoint.clone().ok_or(Error::NotBootstrapped)?;
         let src_addr = endpoint.socket_addr();
@@ -508,6 +507,7 @@ impl ConnectionManager {
             bootstrapped_peer,
         ) = self.qp2p.bootstrap(bootstrap_nodes_override).await?;
         self.endpoint = Some(endpoint);
+        debug!("--->>> endpoitn setthere.... {:?}", self.endpoint.is_some());
 
         trace!("Sending handshake request to bootstrapped node...");
         let public_key = self.keypair.public_key();
@@ -617,7 +617,7 @@ impl ConnectionManager {
 
     /// Listen for incoming messages on a connection
     pub async fn listen_to_incoming_messages(
-        mut self,
+        &'static mut self,
         mut incoming_messages: IncomingMessages,
     ) -> Result<(), Error> {
         debug!("Adding IncomingMessages listener");

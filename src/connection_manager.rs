@@ -68,7 +68,8 @@ pub struct ConnectionManager {
     
     // receive the pk set when calling bootstrap func
     keyset_sender: Arc<Mutex<Sender<Result<ReplicaPublicKeySet, Error>>>>,
-    keyset_receiver: Arc<Mutex<Receiver<Result<ReplicaPublicKeySet, Error>>>>
+    keyset_receiver: Arc<Mutex<Receiver<Result<ReplicaPublicKeySet, Error>>>>,
+    // network_listener: Arc<Mutex<JoinHandle<Result<(), Error>>>>
     // keyset_channel: Arc<Mutex<Option<KeySetSender>>>
     // keyset_channel: <Arc<Mutex<Option<Sender<Result<ReplicaPublicKeySet, Error>>>>>,
     // config_file_path: Option<&'static Path>,
@@ -107,6 +108,7 @@ impl ConnectionManager {
         let mut attempts: u32 = 0;
 
         loop {
+            trace!("bootstrap attempt, {:?}", attempts);
             let res = self.clone().bootstrap(bootstrap_config).await;
             match res {
                 Ok(pk_set) => {
@@ -150,7 +152,8 @@ impl ConnectionManager {
 
                 debug!("11111 endpoint is: {:?}", self.endpoint.lock().await.is_some());
             }
-        self.listen_to_incoming_messages(incoming_messages).await?;
+        let handle = self.listen_to_incoming_messages(incoming_messages).await;
+
         // debug!("2222 endpoint is: {:?}", self.endpoint.lock().await.is_some());
         {
 
@@ -651,12 +654,12 @@ impl ConnectionManager {
     pub async fn listen_to_incoming_messages(
         &self,
         mut incoming_messages: IncomingMessages,
-    ) -> Result<(), Error> {
+    ) -> JoinHandle<Result<(), Error>> {
         debug!("Adding IncomingMessages listener");
         
         let cm = self.clone();
         // Spawn a thread for listening
-        let _ = tokio::spawn(async move {
+        tokio::spawn(async move {
             trace!("Listener thread spawned");
 
             while let Some((src, message)) = incoming_messages.next().await {
@@ -680,10 +683,7 @@ impl ConnectionManager {
             }
             info!("IncomingMessages listener is closing now");
             Ok::<(), Error>(())
-        });
-
-        debug!("outwith of listener");
-        Ok(())
+        })
     }
 
     /// Handle received infrastructure messages

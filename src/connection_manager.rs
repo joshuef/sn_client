@@ -700,7 +700,8 @@ impl ConnectionManager {
                 // let config = Config::new(self.config_file_path, Some(addresses.iter().cloned().collect())).qp2p;
 
                 // Continually try and bootstrap against new elders while we're getting rediret
-                let _ = self.get_section(&addresses).await?;
+                self.get_section(&addresses).await?;
+                // self.listen_to_incoming_messages(incoming).await;
 
                 Ok(())
             }

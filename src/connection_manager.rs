@@ -617,7 +617,7 @@ impl ConnectionManager {
 
     /// Listen for incoming messages on a connection
     pub async fn listen_to_incoming_messages(
-        &'static mut self,
+        &mut self,
         mut incoming_messages: IncomingMessages,
     ) -> Result<(), Error> {
         debug!("Adding IncomingMessages listener");
@@ -650,7 +650,7 @@ impl ConnectionManager {
     }
 
     /// Handle received infrastructure messages
-    async fn handle_infrastructure_msg(&mut self, msg: NetworkInfoMsg) -> Result<(), Error> {
+    async fn handle_infrastructure_msg(&self, msg: NetworkInfoMsg) -> Result<(), Error> {
         match msg {
 
             NetworkInfoMsg::GetSectionResponse(GetSectionResponse::SectionNetworkInfoUpdate(error)) => {

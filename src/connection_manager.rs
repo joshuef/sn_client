@@ -171,7 +171,10 @@ impl ConnectionManager {
         let msg_bytes = msg.serialize()?;
 
         let msg_id = msg.id();
-        let _ = pending_transfers.lock().await.insert(msg_id, sender);
+
+        {
+            let _ = pending_transfers.lock().await.insert(msg_id, sender);
+        }
 
         // Send message to all Elders concurrently
         let mut tasks = Vec::default();
@@ -232,10 +235,12 @@ impl ConnectionManager {
                     let msg_bytes_clone = msg_bytes_clone.clone();
 
                     let (sender, mut receiver) = channel::<Result<QueryResponse, Error>>(7);
-                    let _ = pending_queries
-                        .lock()
-                        .await
-                        .insert((socket, msg_id), sender);
+                    {
+                        let _ = pending_queries
+                            .lock()
+                            .await
+                            .insert((socket, msg_id), sender);
+                    }
 
                     // TODO: we need to remove the msg_id from
                     // pending_queries upon any failure below
@@ -613,12 +618,16 @@ impl ConnectionManager {
             } => {
                 trace!("Query response in: {:?}", response);
 
-                if let Some(mut sender) = session
-                    .pending_queries
-                    .lock()
-                    .await
-                    .remove(&(src, correlation_id))
+                let sender;
                 {
+                    sender = session
+                        .pending_queries
+                        .lock()
+                        .await
+                        .remove(&(src, correlation_id));
+                }
+
+                if let Some(mut sender) = sender {
                     trace!("Sender channel found for query response");
                     let _ = sender.send(Ok(response)).await;
                 } else {
@@ -634,12 +643,21 @@ impl ConnectionManager {
                 ..
             } => {
                 if let Event::TransferValidated { event, .. } = event {
-                    if let Some(sender) = session
-                        .pending_transfers
-                        .lock()
-                        .await
-                        .get_mut(&correlation_id)
+                    let mut sender = None;
+
+                    // block off lock to avoid lenghty lock w/ following async
                     {
+                        if let Some(the_sender) = session
+                            .pending_transfers
+                            .lock()
+                            .await
+                            .get_mut(&correlation_id)
+                        {
+                            sender = Some(the_sender.clone())
+                        }
+                    }
+
+                    if let Some(mut sender) = sender {
                         info!("Accumulating SignatureShare");
                         let _ = sender.send(Ok(event)).await;
                     } else {
@@ -654,12 +672,21 @@ impl ConnectionManager {
                 correlation_id,
                 ..
             } => {
-                if let Some(sender) = session
-                    .pending_transfers
-                    .lock()
-                    .await
-                    .get_mut(&correlation_id)
+                let mut sender = None;
+
+                // block off lock to avoid lenghty lock w/ following async
                 {
+                    if let Some(the_sender) = session
+                        .pending_transfers
+                        .lock()
+                        .await
+                        .get_mut(&correlation_id)
+                    {
+                        sender = Some(the_sender.clone())
+                    }
+                }
+
+                if let Some(mut sender) = sender {
                     debug!("Cmd Error was received, sending on channel to caller");
                     let _ = sender.send(Err(Error::from(error.clone()))).await;
                 } else {

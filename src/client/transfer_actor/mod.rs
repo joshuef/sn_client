@@ -226,30 +226,9 @@ impl Client {
 
         let cost_of_put = self.get_store_cost(bytes).await?;
 
-        let initiated = self
-            .transfer_actor
-            .lock()
-            .await
-            .transfer(cost_of_put, section_key, "asdf".to_string())?
-            .ok_or(Error::NoTransferEventsForLocalActor)?;
-        let signed_transfer = SignedTransfer {
-            debit: initiated.signed_debit,
-            credit: initiated.signed_credit,
-        };
-
-        let command = Cmd::Transfer(TransferCmd::ValidateTransfer(signed_transfer.clone()));
-
-        debug!("Transfer to be sent: {:?}", &signed_transfer);
-
-        let transfer_message = self.create_cmd_message(command)?;
-
-        self.transfer_actor
-            .lock()
-            .await
-            .apply(ActorEvent::TransferInitiated(TransferInitiated {
-                signed_debit: signed_transfer.debit.clone(),
-                signed_credit: signed_transfer.credit.clone(),
-            }))?;
+        let (transfer_message, signed_transfer) = self
+            .generate_and_apply_transfer(cost_of_put, section_key)
+            .await?;
 
         let payment_proof: TransferAgreementProof = self
             .await_validation(&transfer_message, signed_transfer.id())
@@ -258,6 +237,26 @@ impl Client {
         debug!("Payment proof retrieved");
         Ok(payment_proof)
     }
+
+    //  /// generate a transfer and apply it to our local actor
+    //  async fn generate_and_apply_payment(
+    //     &self,
+    //     amount: Token,
+    //     to: PublicKey,
+    // ) -> Result<(Message, SignedTransfer), Error> {
+    //     let initiated = self
+    //     .transfer_actor
+    //     .lock()
+    //     .await
+    //     .transfer(cost_of_put, section_key, "asdf".to_string())?
+    //     .ok_or(Error::NoTransferEventsForLocalActor)?;
+    //     let signed_transfer = SignedTransfer {
+    //         debit: initiated.signed_debit,
+    //         credit: initiated.signed_credit,
+    //     };
+
+    //     Ok((message, signed_transfer))
+    // }
 
     /// Send message and await validation and constructing of TransferAgreementProof
     async fn await_validation(

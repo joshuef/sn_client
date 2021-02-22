@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use sn_data_types::{PublicKey, SignedTransfer, Token, TransferAgreementProof};
-use sn_messaging::client::{Cmd, Event, Query, QueryResponse, TransferCmd, TransferQuery};
+use sn_messaging::client::{Cmd, Event, Message, Query, QueryResponse, TransferCmd, TransferQuery};
 use sn_transfers::{ActorEvent, TransferInitiated};
 
 use crate::{client::Client, connection_manager::ConnectionManager, errors::Error};
@@ -140,34 +140,7 @@ impl Client {
         // first make sure our balance  history is up to date
         self.get_history().await?;
 
-        info!(
-            "Our actor balance at send: {:?}",
-            self.transfer_actor.lock().await.balance()
-        );
-
-        let initiated = self
-            .transfer_actor
-            .lock()
-            .await
-            .transfer(amount, to, "asdf".to_string())?
-            .ok_or(Error::NoTransferGenerated)?;
-
-        let signed_transfer = SignedTransfer {
-            debit: initiated.signed_debit,
-            credit: initiated.signed_credit,
-        };
-        let dot = signed_transfer.id();
-        let msg_contents = Cmd::Transfer(TransferCmd::ValidateTransfer(signed_transfer.clone()));
-
-        let message = self.create_cmd_message(msg_contents)?;
-
-        self.transfer_actor
-            .lock()
-            .await
-            .apply(ActorEvent::TransferInitiated(TransferInitiated {
-                signed_debit: signed_transfer.debit.clone(),
-                signed_credit: signed_transfer.credit.clone(),
-            }))?;
+        let (message, signed_transfer) = self.generate_and_apply_transfer(amount, to).await?;
 
         let transfer_proof: TransferAgreementProof = self
             .await_validation(&message, signed_transfer.id())
@@ -193,8 +166,40 @@ impl Client {
             .ok_or(Error::NoTransferEventsForLocalActor)?;
 
         actor.apply(ActorEvent::TransferRegistrationSent(register_event))?;
-
+        let dot = signed_transfer.id();
         Ok((dot.counter, dot.actor))
+    }
+
+    /// generate a transfer and apply it to our local actor
+    pub async fn generate_and_apply_transfer(
+        &self,
+        amount: Token,
+        to: PublicKey,
+    ) -> Result<(Message, SignedTransfer), Error> {
+        let mut actor = self.transfer_actor.lock().await;
+        info!("Our actor balance at send: {:?}", actor.balance());
+
+        let initiated = actor
+            .transfer(amount, to, "asdf".to_string())?
+            .ok_or(Error::NoTransferGenerated)?;
+
+        let signed_transfer = SignedTransfer {
+            debit: initiated.signed_debit,
+            credit: initiated.signed_credit,
+        };
+
+        debug!("Transfer to be sent: {:?}", &signed_transfer);
+
+        let msg_contents = Cmd::Transfer(TransferCmd::ValidateTransfer(signed_transfer.clone()));
+
+        let message = self.create_cmd_message(msg_contents)?;
+
+        actor.apply(ActorEvent::TransferInitiated(TransferInitiated {
+            signed_debit: signed_transfer.debit.clone(),
+            signed_credit: signed_transfer.credit.clone(),
+        }))?;
+
+        Ok((message, signed_transfer))
     }
 }
 
